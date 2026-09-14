@@ -1,0 +1,175 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-work-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  /* Token khas Ruang Tumbuh (dari ruang-tumbuh-v3.html) */
+  --color-rt-violet: #8b7cff;
+  --color-rt-teal: #40d7c0;
+  --color-rt-lilac: #b6a9ff;
+  --color-rt-good: #67d69a;
+  --color-rt-panel: #151922;
+  --color-rt-panel-2: #1b202a;
+}
+
+/*
+  Palet gelap editorial Ruang Tumbuh — diambil persis dari ruang-tumbuh-v3.html:
+  bg #0b0d12 · panel #151922 · teks #f5f7fb · muted #969ead
+  aksen violet #8b7cff · teal #40d7c0 · lilac #b6a9ff · good #67d69a
+*/
+:root,
+.dark {
+  --radius: 0.9rem;
+  --background: #0b0d12;
+  --foreground: #f5f7fb;
+  --card: #151922;
+  --card-foreground: #f5f7fb;
+  --popover: #151922;
+  --popover-foreground: #f5f7fb;
+  --primary: #8b7cff;
+  --primary-foreground: #ffffff;
+  --secondary: #1b202a;
+  --secondary-foreground: #f5f7fb;
+  --muted: #1b202a;
+  --muted-foreground: #969ead;
+  --accent: #1b202a;
+  --accent-foreground: #f5f7fb;
+  --destructive: #e0645c;
+  --border: rgba(255, 255, 255, 0.09);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: rgba(139, 124, 255, 0.55);
+  --chart-1: #8b7cff;
+  --chart-2: #40d7c0;
+  --chart-3: #b6a9ff;
+  --chart-4: #67d69a;
+  --chart-5: #d1a260;
+  --sidebar: #0e1016;
+  --sidebar-foreground: #f5f7fb;
+  --sidebar-primary: #8b7cff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1b202a;
+  --sidebar-accent-foreground: #f5f7fb;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-ring: rgba(139, 124, 255, 0.55);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply text-foreground;
+    background-color: #0b0d12;
+    /* Latar berlapis khas Ruang Tumbuh: pendar violet & teal yang sangat halus */
+    background-image:
+      radial-gradient(circle at 10% 0%, rgba(139, 124, 255, 0.16), transparent 30%),
+      radial-gradient(circle at 90% 10%, rgba(64, 215, 192, 0.1), transparent 28%),
+      linear-gradient(180deg, #0b0d12 0%, #0e1016 46%, #0b0d12 100%);
+    background-attachment: fixed;
+  }
+  /* Scrollbar tenang, konsisten gelap */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #252a35;
+    border-radius: 99px;
+    border: 2px solid #0b0d12;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #343b4a;
+  }
+}
+
+@layer utilities {
+  /* Panel "sheet" — kartu utama dengan gradasi halus + lingkaran dekoratif */
+  .rt-sheet {
+    position: relative;
+    background: linear-gradient(180deg, rgba(22, 26, 35, 0.97), rgba(16, 19, 26, 0.99));
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 28px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
+    overflow: hidden;
+  }
+  .rt-sheet::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(139, 124, 255, 0.06),
+      transparent 26%,
+      rgba(64, 215, 192, 0.035) 72%,
+      transparent
+    );
+    pointer-events: none;
+  }
+  .rt-fine {
+    font-family: var(--font-fraunces), Georgia, serif;
+    font-style: italic;
+    font-size: 0.72rem;
+    color: #69717f;
+  }
+  .rt-kicker {
+    font-family: var(--font-plex-mono), monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #69717f;
+  }
+  .rt-glow-ring {
+    position: absolute;
+    border-radius: 9999px;
+    border: 1px solid rgba(139, 124, 255, 0.12);
+    box-shadow:
+      0 0 0 28px rgba(139, 124, 255, 0.025),
+      0 0 0 56px rgba(139, 124, 255, 0.018);
+    pointer-events: none;
+  }
+}

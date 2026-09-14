@@ -1,0 +1,232 @@
+// Ruang Tumbuh — schema lengkap (Fase 1–6).
+// Mirror 1:1 dari supabase/schema.sql (PostgreSQL). Perbedaan sandbox:
+//  - Profile.passwordHash hanya ada di sandbox (produksi: kredensial dipegang Supabase Auth).
+//  - preferred_days & enum disimpan sebagai String/Int (SQLite), produksi memakai jsonb/enum Postgres.
+// Uang selalu integer rupiah. Persentase alokasi integer, wajib total 100.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Identitas & workspace ────────────────────────────────────────────────
+
+model Profile {
+  id           String   @id // = auth.users.id di produksi (auth.uid())
+  email        String   @unique // sandbox-only login identifier
+  passwordHash String? // sandbox-only; TIDAK ADA di produksi (Supabase Auth)
+  displayName  String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships WorkspaceMember[]
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members    WorkspaceMember[]
+  activities Activity[]
+}
+
+model WorkspaceMember {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        String // "owner" | "partner"
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+// ─── Ruang Tumbuh: aktivitas & log ────────────────────────────────────────
+
+model Activity {
+  id                      String   @id @default(uuid())
+  workspaceId             String
+  createdBy               String
+  name                    String
+  description             String   @default("")
+  weeklyTarget            Int      @default(1)
+  estimatedDurationMinutes Int?
+  preferredStartTime      String? // "HH:MM"
+  preferredEndTime        String? // "HH:MM"
+  preferredDays           String   @default("[]") // JSON array int 0=Minggu..6=Sabtu; [] = fleksibel
+  active                  Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  logs      ActivityLog[]
+  plans     WeeklyPlanEntry[]
+
+  @@index([workspaceId])
+}
+
+// Gabungan rencana + realisasi (satu entri per tanggal per aktivitas per orang).
+// Status: planned | done | skipped | rescheduled.
+// rescheduledFrom = tanggal asal saat aktivitas digeser (riwayat dipertahankan).
+model ActivityLog {
+  id                     String   @id @default(uuid())
+  workspaceId            String
+  activityId             String
+  userId                 String
+  date                   String // YYYY-MM-DD
+  status                 String   @default("planned")
+  plannedDurationMinutes Int?
+  actualDurationMinutes  Int?
+  note                   String   @default("")
+  rescheduledFrom        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId, date])
+  @@index([workspaceId, date])
+}
+
+model WeeklyPlanEntry {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  activityId       String
+  userId           String
+  date             String // YYYY-MM-DD
+  plannedStartTime String?
+  plannedEndTime   String?
+  status           String   @default("planned")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId, date])
+  @@index([workspaceId, date])
+}
+
+model EnergyLog {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  date        String // YYYY-MM-DD
+  level       Int // 1 rendah | 2 sedang | 3 tinggi
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([workspaceId, date])
+}
+
+// ─── Refleksi & komentar ─────────────────────────────────────────────────
+
+model WeeklyReflection {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  userId         String
+  weekStart      String // YYYY-MM-DD (Senin)
+  worked         String   @default("")
+  blocked        String   @default("")
+  nextAdjustment String   @default("")
+  weeklySentence String   @default("")
+  gratitude      String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, weekStart])
+  @@index([workspaceId, weekStart])
+}
+
+model Comment {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  entityType  String // "weekly_reflection" | "activity_log"
+  entityId    String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, entityType, entityId])
+}
+
+// ─── Chat pribadi (realtime) ─────────────────────────────────────────────
+
+model Message {
+  id          String   @id @default(uuid())
+  workspaceId String
+  senderId    String
+  content     String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+// ─── Buku Kas: transaksi, kategori, alokasi, dana target ─────────────────
+
+model Transaction {
+  id          String   @id @default(uuid())
+  workspaceId String
+  createdBy   String
+  date        String // YYYY-MM-DD
+  type        String // income | expense
+  categoryId  String
+  amount      Int // rupiah, > 0
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, date])
+}
+
+model TransactionCategory {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  name          String
+  type          String // income | expense
+  bucket        String // income | needs | wants | charity | savings | target
+  monthlyTarget Int      @default(0) // 0 = tanpa target bulanan
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// Alokasi otomatis pemasukan — WAJIB total 100%. Satu baris per workspace.
+// TERPISAH dari lensa interpretasi 50/30/20 (dihitung runtime dari bucket).
+model AllocationPlan {
+  id             String   @id @default(uuid())
+  workspaceId    String   @unique
+  needsPercent   Int      @default(10)
+  wantsPercent   Int      @default(20)
+  charityPercent Int      @default(10)
+  savingsPercent Int      @default(20)
+  targetPercent  Int      @default(40)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model FinancialTarget {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  name          String
+  targetAmount  Int
+  currentAmount Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
+}

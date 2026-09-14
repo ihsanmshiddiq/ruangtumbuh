@@ -1,0 +1,528 @@
+     1→<!doctype html>
+     2→<html lang="id">
+     3→<head>
+     4→<meta charset="utf-8">
+     5→<meta name="viewport" content="width=device-width,initial-scale=1">
+     6→<title>Ruang Tumbuh</title>
+     7→<style>
+     8→@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+     9→:root{
+    10→  --bg:#0b0d12;--panel:#151922;--panel-2:#1b202a;--line:rgba(255,255,255,.09);--line-2:rgba(255,255,255,.16);
+    11→  --text:#f5f7fb;--muted:#969ead;--muted-2:#69717f;--accent:#8b7cff;--accent-2:#40d7c0;--accent-3:#b6a9ff;
+    12→  --good:#67d69a;--shadow:0 30px 80px rgba(0,0,0,.42);
+    13→}
+    14→*{box-sizing:border-box}html,body{margin:0;padding:0;min-height:100%;}
+    15→body{background:radial-gradient(circle at 10% 0%,rgba(139,124,255,.16),transparent 30%),radial-gradient(circle at 90% 10%,rgba(64,215,192,.10),transparent 28%),linear-gradient(180deg,#0b0d12 0%,#0e1016 46%,#0b0d12 100%);color:var(--text);font-family:'Work Sans',sans-serif;padding:34px 18px 60px;min-height:100vh;}
+    16→.sheet{max-width:1120px;width:100%;margin:0 auto;background:linear-gradient(180deg,rgba(22,26,35,.97),rgba(16,19,26,.99));border:1px solid var(--line);border-radius:28px;box-shadow:var(--shadow);padding:28px;position:relative;overflow:hidden;}
+    17→.sheet::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(139,124,255,.06),transparent 26%,rgba(64,215,192,.035) 72%,transparent);pointer-events:none;}
+    18→.sheet::after{content:'';position:absolute;top:-180px;right:-160px;width:360px;height:360px;border-radius:50%;border:1px solid rgba(139,124,255,.12);box-shadow:0 0 0 28px rgba(139,124,255,.025),0 0 0 56px rgba(139,124,255,.018);pointer-events:none;}
+    19→h1,h2,h3{font-family:'Fraunces',serif;margin:0}header.masthead{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding:4px 4px 24px;margin-bottom:16px;border-bottom:1px solid var(--line);position:relative;z-index:1}
+    20→header.masthead h1{font-size:2.5rem;line-height:1.05;font-weight:600;letter-spacing:-.03em}.tagline{font-style:italic;color:var(--muted);font-size:.98rem;margin-top:8px;font-family:'Fraunces',serif}.save-indicator{font-size:.72rem;color:var(--good);opacity:0;transition:opacity .4s;font-style:italic;margin-top:9px}.save-indicator.show{opacity:1}
+    21→.seal{width:118px;height:118px;border-radius:24px;border:1px solid var(--line-2);background:linear-gradient(145deg,rgba(139,124,255,.18),rgba(64,215,192,.07));position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;transform:rotate(2deg);text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+    22→.seal::before{content:'';position:absolute;inset:9px;border:1px dashed rgba(255,255,255,.12);border-radius:17px}.seal .seal-label{font-size:.58rem;letter-spacing:1.5px;font-family:'Work Sans',sans-serif;text-transform:uppercase;color:var(--muted)}.seal .seal-value{font-family:'IBM Plex Mono',monospace;font-size:1.65rem;font-weight:600;color:var(--accent-3);margin-top:2px}
+    23→nav.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 22px;position:relative;z-index:1}nav.tabs button{background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;padding:11px 14px;border-radius:12px;font-family:'Work Sans',sans-serif;font-size:.86rem;font-weight:600;transition:.2s}nav.tabs button:hover{color:var(--text);background:rgba(255,255,255,.03)}nav.tabs button.active{color:var(--text);background:linear-gradient(135deg,rgba(139,124,255,.18),rgba(139,124,255,.07));border-color:rgba(139,124,255,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}.tabs-rule{display:none}
+    24→section.block{margin-bottom:22px;padding:18px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.018)}.block-title{font-size:.96rem;font-weight:600;margin-bottom:10px}.fine-print{font-size:.72rem;color:var(--muted-2);font-style:italic;font-family:'Fraunces',serif}.guide-note{font-size:.82rem;color:#aab1bd;font-style:italic;font-family:'Fraunces',serif;margin-bottom:18px;padding:12px 14px;border:1px solid rgba(64,215,192,.16);background:rgba(64,215,192,.045);border-radius:12px}.stat-line{font-size:.85rem;color:var(--muted);margin-bottom:16px}.stat-line b{color:var(--text);font-weight:600}.block-rule{border:none;border-top:1px solid var(--line);margin:22px 0}
+    25→.prog-row{display:grid;grid-template-columns:170px 1fr 64px;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)}.prog-row:last-child{border-bottom:none}.prog-row .prog-label{font-size:.84rem;color:#d8dce4;font-weight:500}.prog-row .prog-fill{height:8px;background:#252a35;position:relative;border-radius:99px;overflow:hidden}.prog-row .prog-fill i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--accent),var(--accent-2));display:block;border-radius:99px;box-shadow:0 0 18px rgba(139,124,255,.32)}.prog-row .prog-value{font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--muted);text-align:right}
+    26→.week-nav{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:0 2px}.week-nav button{background:#171b24;border:1px solid var(--line);font-family:'Fraunces',serif;font-size:1.1rem;color:var(--accent-3);cursor:pointer;line-height:1;padding:8px 11px;border-radius:10px}.week-nav .range{font-family:'Fraunces',serif;font-style:italic;font-size:1.05rem;color:var(--text);margin-left:3px}.week-nav .today-link{margin-left:auto;font-size:.74rem;color:var(--muted);cursor:pointer;text-decoration:none;padding:8px 10px;border:1px solid var(--line);border-radius:9px}
+    27→details.day-card{border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.012));border-radius:16px;padding:0;margin:10px 0;overflow:hidden}details.day-card summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;list-style:none;padding:16px;font-family:'Fraunces',serif}details.day-card summary::-webkit-details-marker{display:none}details.day-card summary::before{content:'+';color:var(--accent-3);font-size:.9rem;margin-right:10px}details.day-card[open] summary::before{content:'–'}details.day-card summary .d-name{font-size:1rem;font-weight:500;flex:1}details.day-card summary .d-name.today{color:var(--accent-3)}details.day-card summary .d-meta{font-size:.72rem;color:var(--muted);font-style:italic;font-family:'Fraunces',serif}.day-body{padding:0 16px 16px;border-top:1px solid var(--line)}.task-group-title{font-family:'Fraunces',serif;font-style:italic;font-size:.74rem;color:var(--muted);margin:15px 0 8px}
+    28→.task-row{display:grid;grid-template-columns:22px 1fr 60px 96px 52px;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.045)}.task-row .chk{width:20px;height:20px;border:1.5px solid #535b69;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:transparent;font-size:.76rem;transition:.2s}.task-row .chk:hover{border-color:var(--accent-3);transform:scale(1.04)}.task-row .chk.done{color:#09110d;border-color:var(--good);background:var(--good)}.task-row .chk.done::after{content:'✓'}.task-row .t-name{font-size:.84rem;color:#d8dce4}.task-row .t-time{font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--muted)}.task-row .t-dur{font-style:italic;font-family:'Fraunces',serif;font-size:.74rem;color:var(--muted);text-align:right}.task-row .t-note{font-size:.68rem;color:var(--muted);cursor:pointer;text-decoration:none;border:1px solid var(--line);padding:5px 7px;border-radius:7px;text-align:center}.task-row .t-note:hover{color:var(--text);border-color:var(--line-2)}.task-row.compact .t-time,.task-row.compact .t-dur{display:none}.task-row.compact{grid-template-columns:22px 1fr 52px}.empty-hint{font-size:.8rem;color:var(--muted-2);font-style:italic;padding:14px 0}
+    29→.energy-row{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.045)}.energy-row .e-label{font-size:.73rem;color:var(--muted);font-style:italic;font-family:'Fraunces',serif;margin-right:3px}.energy-btn{width:31px;height:31px;border:1px solid var(--line);background:#151922;border-radius:9px;cursor:pointer;color:var(--muted);font-family:'IBM Plex Mono',monospace;transition:.2s}.energy-btn:hover{border-color:var(--accent);color:var(--text)}.energy-btn.active{border-color:rgba(139,124,255,.5);color:#fff;background:rgba(139,124,255,.16)}
+    30→.review-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.review-field{padding:15px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.02)}.review-field label{display:block;font-family:'Fraunces',serif;font-style:italic;font-size:.84rem;color:#c4cad4;margin-bottom:7px}.review-field textarea{width:100%;min-height:110px;font-family:'Work Sans',sans-serif;font-size:.84rem;color:var(--text);background:transparent;border:none;outline:none;padding:6px 0;resize:vertical}.review-field textarea::placeholder{color:#596171}.review-field:focus-within{border-color:rgba(139,124,255,.45);box-shadow:0 0 0 3px rgba(139,124,255,.08)}
+    31→.act-row{display:grid;grid-template-columns:1.6fr .7fr 1fr 1.6fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)}.act-row-head{font-family:'Work Sans',sans-serif;font-size:.68rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);border-bottom:1px solid var(--line-2);padding-bottom:9px}.act-row .a-name{font-weight:600;font-size:.84rem;color:#e5e8ee}.act-row .a-schedule{font-size:.71rem;color:var(--muted)}.act-row input[type=number]{width:56px;border:1px solid var(--line);border-radius:8px;background:#11141b;color:var(--text);font-family:'IBM Plex Mono',monospace;padding:7px 8px}.act-row input:focus{outline:none;border-color:var(--accent)}.act-row .a-actions{display:flex;gap:9px;justify-content:flex-end}.act-row .a-actions span{cursor:pointer;font-family:'Work Sans',sans-serif;font-size:.68rem;color:var(--muted);padding:6px 8px;border:1px solid var(--line);border-radius:7px}.act-row .a-actions span:hover{color:var(--text);border-color:var(--line-2)}
+    32→.btn-line{background:transparent;border:1px solid var(--line);border-radius:9px;font-family:'Work Sans',sans-serif;font-size:.76rem;color:#c5cbd5;padding:8px 11px;cursor:pointer;transition:.2s}.btn-line:hover{color:#fff;border-color:var(--line-2);background:rgba(255,255,255,.03)}.btn-solid{background:linear-gradient(135deg,var(--accent),#6f5ff7);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:'Work Sans',sans-serif;font-size:.76rem;font-weight:700;cursor:pointer;box-shadow:0 10px 24px rgba(111,95,247,.22)}.btn-solid:hover{filter:brightness(1.08)}
+    33→.footer-note{margin-top:8px;padding-top:18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;position:relative;z-index:1}.footer-actions{display:flex;gap:8px;flex-wrap:wrap}input[type=file]{display:none}
+    34→.modal-overlay{position:fixed;inset:0;background:rgba(3,5,8,.72);backdrop-filter:blur(9px);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}.modal-overlay.open{display:flex}.modal-panel{background:#151922;border:1px solid var(--line-2);border-radius:20px;max-width:560px;width:100%;padding:24px;box-shadow:0 26px 70px rgba(0,0,0,.52);max-height:88vh;overflow-y:auto}.modal-panel h2{font-size:1.25rem;margin-bottom:18px}.form-row{margin-bottom:14px}.form-row label{display:block;font-family:'Work Sans',sans-serif;font-size:.71rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:7px}.form-row input[type=text],.form-row input[type=number],.form-row input[type=time],.form-row input[type=date],.form-row select{width:100%;border:1px solid var(--line);border-radius:9px;background:#10131a;padding:9px 10px;font-size:.84rem;color:var(--text);font-family:'Work Sans',sans-serif}.form-row input:focus,.form-row select:focus{outline:none;border-color:rgba(139,124,255,.55);box-shadow:0 0 0 3px rgba(139,124,255,.08)}.days-picker{display:flex;gap:6px;flex-wrap:wrap}.days-picker label{display:flex;align-items:center;gap:5px;font-size:.72rem;border:1px solid var(--line);padding:6px 9px;cursor:pointer;border-radius:8px;text-transform:none;letter-spacing:0;color:var(--muted)}.days-picker label:has(input:checked){background:rgba(139,124,255,.12);border-color:rgba(139,124,255,.35);color:var(--text)}.days-picker input{margin:0;accent-color:var(--accent)}.modal-actions{display:flex;justify-content:space-between;align-items:center;margin-top:20px;gap:10px;flex-wrap:wrap}.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:#171b24;border:1px solid var(--line-2);color:#fff;padding:10px 15px;border-radius:10px;font-size:.76rem;opacity:0;transition:.25s;pointer-events:none;z-index:60;box-shadow:0 14px 30px rgba(0,0,0,.35)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    35→@media(max-width:760px){.sheet{padding:20px;border-radius:20px}header.masthead{align-items:center}header.masthead h1{font-size:2rem}.seal{width:92px;height:92px}nav.tabs{grid-template-columns:1fr 1fr}.prog-row{grid-template-columns:1fr auto}.prog-row .prog-fill{grid-column:1/-1;grid-row:2}.task-row{grid-template-columns:22px 1fr 52px}.task-row .t-time,.task-row .t-dur{display:none}.review-grid{grid-template-columns:1fr}.act-row{grid-template-columns:1fr 1fr;row-gap:8px}.act-row .a-actions{justify-content:flex-start}}
+    36→@media(max-width:480px){body{padding:12px 8px 30px}.sheet{padding:15px}header.masthead{padding-bottom:18px}header.masthead h1{font-size:1.7rem}.tagline{font-size:.86rem}.seal{width:78px;height:78px;border-radius:18px}.seal .seal-value{font-size:1.2rem}nav.tabs button{padding:10px 8px;font-size:.75rem}.task-row .t-note{font-size:.62rem}.footer-actions{width:100%}.footer-actions .btn-line{flex:1}}
+    37→</style>
+    38→</head>
+    39→<body>
+    40→<div class="sheet">
+    41→
+    42→  <header class="masthead">
+    43→    <div>
+    44→      <h1>Ruang Tumbuh</h1>
+    45→      <div class="tagline">Jalan boleh berubah. Arah jangan.</div>
+    46→      <div class="save-indicator" id="saveIndicator">tersimpan</div>
+    47→    </div>
+    48→    <div class="seal">
+    49→      <div class="seal-label">minggu ini</div>
+    50→      <div class="seal-value" id="progressSealValue">0%</div>
+    51→    </div>
+    52→  </header>
+    53→
+    54→  <nav class="tabs">
+    55→    <button class="active" data-tab="ringkasan">Ringkasan</button>
+    56→    <button data-tab="minggu">Minggu</button>
+    57→    <button data-tab="review">Review</button>
+    58→    <button data-tab="pengaturan">Pengaturan</button>
+    59→  </nav>
+    60→  <div class="tabs-rule"></div>
+    61→
+    62→  <div id="tabRingkasan">
+    63→    <section class="block">
+    64→      <div class="block-title">Progres minggu ini</div>
+    65→      <div class="stat-line" id="statLine"></div>
+    66→      <div id="progressRows"></div>
+    67→    </section>
+    68→    <hr class="block-rule">
+    69→    <section class="block">
+    70→      <div class="block-title">Hari ini</div>
+    71→      <div id="todayCard"></div>
+    72→    </section>
+    73→  </div>
+    74→
+    75→  <div id="tabMinggu" style="display:none;">
+    76→    <div class="week-nav">
+    77→      <button id="prevWeek">‹</button>
+    78→      <div class="range" id="weekRange"></div>
+    79→      <button id="nextWeek">›</button>
+    80→      <span class="today-link" id="gotoToday">minggu ini</span>
+    81→    </div>
+    82→    <div class="guide-note">Jadwal di bawah cuma panduan, bukan aturan kaku — boleh geser, yang penting tetap dicatat.</div>
+    83→    <div id="dayList"></div>
+    84→  </div>
+    85→
+    86→  <div id="tabReview" style="display:none;">
+    87→    <div class="review-grid">
+    88→      <div class="review-field"><label>Apa yang berjalan baik?</label><textarea id="reviewWorked" placeholder="Contoh: coding lebih enak setelah Isya..."></textarea></div>
+    89→      <div class="review-field"><label>Apa yang menghambat?</label><textarea id="reviewBlocked" placeholder="Contoh: dua hari pulang lebih capek..."></textarea></div>
+    90→      <div class="review-field"><label>Penyesuaian minggu depan</label><textarea id="reviewNext" placeholder="Contoh: target coding tetap 4 sesi, boleh 30 menit..."></textarea></div>
+    91→      <div class="review-field"><label>Satu kalimat minggu ini</label><textarea id="reviewSentence" placeholder="Satu kalimat yang mau dibawa ke minggu depan."></textarea></div>
+    92→    </div>
+    93→  </div>
+    94→
+    95→  <div id="tabPengaturan" style="display:none;">
+    96→    <section class="block">
+    97→      <div class="block-title">Daftar aktivitas</div>
+    98→      <div class="act-row act-row-head"><div>Nama</div><div>Target/mgg</div><div>Waktu &amp; durasi</div><div>Hari</div><div></div></div>
+    99→      <div id="activityList"></div>
+   100→      <div style="margin-top:14px;"><button class="btn-line" id="addActivityBtn">+ tambah aktivitas</button></div>
+   101→    </section>
+   102→    <hr class="block-rule">
+   103→    <section class="block">
+   104→      <label style="font-size:0.88rem;display:flex;align-items:center;gap:8px;">
+   105→        <input type="checkbox" id="sundayReviewToggle"> Gunakan Minggu sebagai hari review utama
+   106→      </label>
+   107→      <div class="fine-print" style="margin-top:4px;">Tidak mengubah target otomatis, cuma bantu alur review.</div>
+   108→    </section>
+   109→  </div>
+   110→
+   111→  <div class="footer-note">
+   112→    <div class="fine-print">Data hanya tersimpan di browser ini. Cadangkan berkala.</div>
+   113→    <div class="footer-actions">
+   114→      <button class="btn-line" id="exportBtn">Ekspor cadangan</button>
+   115→      <button class="btn-line" id="importBtn">Impor cadangan</button>
+   116→      <button class="btn-line" id="resetBtn">Reset</button>
+   117→      <input type="file" id="fileInput" accept="application/json">
+   118→    </div>
+   119→  </div>
+   120→
+   121→</div>
+   122→
+   123→<div class="modal-overlay" id="activityModal">
+   124→  <div class="modal-panel">
+   125→    <h2 id="activityModalTitle">Tambah aktivitas</h2>
+   126→    <form id="activityForm">
+   127→      <div class="form-row"><label>Nama aktivitas</label><input id="activityName" type="text" required placeholder="mis. Baca buku"></div>
+   128→      <div class="form-row"><label>Target per minggu</label><input id="activityTarget" type="number" min="1" value="3" required></div>
+   129→      <div class="form-row"><label>Estimasi durasi</label><input id="activityDuration" type="text" placeholder="mis. 30 menit"></div>
+   130→      <div class="form-row"><label>Waktu pelaksanaan</label><input id="activityTime" type="time"></div>
+   131→      <div class="form-row"><label>Hari pelaksanaan (kosongkan = fleksibel, tanpa hari tetap)</label>
+   132→        <div class="days-picker" id="activityDays">
+   133→          <label><input type="checkbox" value="1"><span>Sen</span></label>
+   134→          <label><input type="checkbox" value="2"><span>Sel</span></label>
+   135→          <label><input type="checkbox" value="3"><span>Rab</span></label>
+   136→          <label><input type="checkbox" value="4"><span>Kam</span></label>
+   137→          <label><input type="checkbox" value="5"><span>Jum</span></label>
+   138→          <label><input type="checkbox" value="6"><span>Sab</span></label>
+   139→          <label><input type="checkbox" value="0"><span>Min</span></label>
+   140→        </div>
+   141→      </div>
+   142→      <div class="form-row"><label>Deskripsi</label><input id="activityDesc" type="text" placeholder="mis. 20-30 menit, fleksibel"></div>
+   143→      <div class="modal-actions">
+   144→        <span class="fine-print">jadwal = panduan, bukan aturan kaku</span>
+   145→        <span style="display:flex;gap:10px;">
+   146→          <button type="button" class="btn-line" id="cancelActivity">Batal</button>
+   147→          <button type="submit" class="btn-solid" id="activitySubmit">Tambah</button>
+   148→        </span>
+   149→      </div>
+   150→    </form>
+   151→  </div>
+   152→</div>
+   153→
+   154→<div class="modal-overlay" id="taskModal">
+   155→  <div class="modal-panel">
+   156→    <h2>Catat aktivitas</h2>
+   157→    <form id="taskForm">
+   158→      <div class="form-row"><label>Tanggal</label><input id="taskDate" type="date" required></div>
+   159→      <div class="form-row"><label>Aktivitas</label><select id="taskActivity" required></select></div>
+   160→      <div class="form-row"><label>Catatan singkat</label><input id="taskNote" type="text" placeholder="mis. jalan cepat 45 menit"></div>
+   161→      <div class="modal-actions">
+   162→        <span class="fine-print">sekali centang pun tetap data</span>
+   163→        <span style="display:flex;gap:10px;">
+   164→          <button type="button" class="btn-line" id="cancelTask">Batal</button>
+   165→          <button type="submit" class="btn-solid">Simpan</button>
+   166→        </span>
+   167→      </div>
+   168→    </form>
+   169→  </div>
+   170→</div>
+   171→
+   172→<div class="toast" id="toast"></div>
+   173→
+   174→<script>
+   175→(() => {
+   176→  const KEY = "ruang_tumbuh_tracker_v2";
+   177→  const uid = () => crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+   178→  const iso = d => new Date(d).toISOString().slice(0,10);
+   179→  const today = () => iso(new Date());
+   180→  const startOfWeek = dateStr => { const d = new Date(dateStr+"T12:00:00"); const day = d.getDay(); const diff = day===0?-6:1-day; d.setDate(d.getDate()+diff); return iso(d); };
+   181→  const addDays = (dateStr,n) => { const d = new Date(dateStr+"T12:00:00"); d.setDate(d.getDate()+n); return iso(d); };
+   182→  const dow = dateStr => new Date(dateStr+"T12:00:00").getDay();
+   183→  const dayNames = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+   184→  const dayShort = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
+   185→  const fmtDateShort = dateStr => { const d = new Date(dateStr+"T12:00:00"); return d.getDate()+" "+["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"][d.getMonth()]; };
+   186→  const $ = s => document.querySelector(s);
+   187→  const $$ = s => [...document.querySelectorAll(s)];
+   188→  let editingActivityId = null;
+   189→  let openDays = new Set([today()]);
+   190→
+   191→  function defaultState(){ return {
+   192→    selectedWeek: startOfWeek(today()),
+   193→    activities: [
+   194→      { id: uid(), name:"Coding", target:4, desc:"Sesi fokus, durasi bebas.", duration:"1 jam", time:"19:15", days:[2,3,6,0] },
+   195→      { id: uid(), name:"Olahraga", target:7, desc:"Ringan juga dihitung.", duration:"40 menit", time:"17:00", days:[1,2,3,4,5,6,0] },
+   196→      { id: uid(), name:"Ngaji", target:7, desc:"Jaga ritme harian.", duration:"1 jam 15 menit", time:"18:00", days:[1,2,3,4,5,6,0] },
+   197→      { id: uid(), name:"Majelis", target:3, desc:"Sesuai jadwal yang memang ada.", duration:"1.5 jam", time:"19:30", days:[1,4,5] },
+   198→      { id: uid(), name:"Self-improvement", target:7, desc:"Terapin satu poin tiap hari.", duration:"", time:"", days:[] },
+   199→    ],
+   200→    logs: [], energy: {}, reviews: {}, sundayReview: true
+   201→  };}
+   202→
+   203→  function normalize(x){
+   204→    const d = defaultState();
+   205→    const acts = Array.isArray(x.activities) && x.activities.length ? x.activities : d.activities;
+   206→    return {
+   207→      selectedWeek: /^\d{4}-\d{2}-\d{2}$/.test(x.selectedWeek||"") ? x.selectedWeek : d.selectedWeek,
+   208→      activities: acts.map(a => ({ id:a.id||uid(), name:a.name||"Aktivitas", target:Math.max(1,Number(a.target)||1), desc:a.desc||"", duration:a.duration||"", time:a.time||"", days:Array.isArray(a.days)?a.days.map(Number):[] })),
+   209→      logs: Array.isArray(x.logs) ? x.logs : [],
+   210→      energy: (x.energy && typeof x.energy==="object") ? x.energy : {},
+   211→      reviews: (x.reviews && typeof x.reviews==="object") ? x.reviews : {},
+   212→      sundayReview: x.sundayReview !== false
+   213→    };
+   214→  }
+   215→  function load(){
+   216→    try{
+   217→      const raw = localStorage.getItem(KEY);
+   218→      if(raw) return normalize(JSON.parse(raw));
+   219→      const old = localStorage.getItem("ruang_tumbuh_tracker_v1");
+   220→      if(old) return normalize(JSON.parse(old));
+   221→    }catch(e){}
+   222→    return defaultState();
+   223→  }
+   224→  function save(){
+   225→    localStorage.setItem(KEY, JSON.stringify(state));
+   226→    const ind = $("#saveIndicator"); ind.classList.add("show");
+   227→    clearTimeout(window.__saveT); window.__saveT = setTimeout(()=>ind.classList.remove("show"),1300);
+   228→  }
+   229→
+   230→  function weekLogs(){ return state.logs.filter(x => x.date>=state.selectedWeek && x.date<=addDays(state.selectedWeek,6)); }
+   231→  function activityDone(id){ return weekLogs().filter(x=>x.activityId===id).length; }
+   232→  function dateLogs(date){ return state.logs.filter(x=>x.date===date); }
+   233→  function energyLabel(n){ return n===3?"tinggi":n===2?"sedang":n===1?"rendah":"—"; }
+   234→  function escape(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
+   235→  function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(window.__toast); window.__toast=setTimeout(()=>t.classList.remove("show"),1700); }
+   236→
+   237→  function toggle(date, activityId){
+   238→    const idx = state.logs.findIndex(l=>l.date===date && l.activityId===activityId);
+   239→    if(idx>=0) state.logs.splice(idx,1); else state.logs.push({id:uid(),date,activityId,note:""});
+   240→    save(); render();
+   241→  }
+   242→
+   243→  /* ---------- Tabs ---------- */
+   244→  $$("nav.tabs button").forEach(btn=>{
+   245→    btn.addEventListener("click", ()=>{
+   246→      $$("nav.tabs button").forEach(b=>b.classList.toggle("active", b===btn));
+   247→      const tab = btn.dataset.tab;
+   248→      $("#tabRingkasan").style.display = tab==="ringkasan" ? "" : "none";
+   249→      $("#tabMinggu").style.display = tab==="minggu" ? "" : "none";
+   250→      $("#tabReview").style.display = tab==="review" ? "" : "none";
+   251→      $("#tabPengaturan").style.display = tab==="pengaturan" ? "" : "none";
+   252→    });
+   253→  });
+   254→
+   255→  /* ---------- Ringkasan ---------- */
+   256→  function renderRingkasan(){
+   257→    const totalTarget = state.activities.reduce((a,x)=>a+x.target,0);
+   258→    const totalDone = state.activities.reduce((a,x)=>a+Math.min(activityDone(x.id),x.target),0);
+   259→    const pct = totalTarget ? Math.round(totalDone/totalTarget*100) : 0;
+   260→    $("#progressSealValue").textContent = pct+"%";
+   261→
+   262→    const vals = Object.entries(state.energy).filter(([k])=>k>=state.selectedWeek && k<=addDays(state.selectedWeek,6)).map(([,v])=>v).filter(Boolean);
+   263→    const avgEnergy = vals.length ? energyLabel(Math.round(vals.reduce((a,b)=>a+b,0)/vals.length)) : "—";
+   264→    $("#statLine").innerHTML = `<b>${totalDone}</b> dari <b>${totalTarget}</b> target minggu ini tercapai (${pct}%) · energi rata-rata: <b>${avgEnergy}</b>`;
+   265→
+   266→    const rows = $("#progressRows"); rows.innerHTML = "";
+   267→    state.activities.forEach(a=>{
+   268→      const done = activityDone(a.id);
+   269→      const p = a.target ? Math.min(100, Math.round(done/a.target*100)) : 0;
+   270→      const row = document.createElement("div");
+   271→      row.className = "prog-row";
+   272→      row.innerHTML = `<span class="prog-label">${escape(a.name)}</span><span class="prog-fill"><i style="width:${p}%"></i></span><span class="prog-value">${done}/${a.target}</span>`;
+   273→      rows.appendChild(row);
+   274→    });
+   275→
+   276→    $("#todayCard").innerHTML = "";
+   277→    $("#todayCard").appendChild(buildDayCard(today()));
+   278→    bindDayCardEvents($("#todayCard"));
+   279→  }
+   280→
+   281→  /* ---------- Day card builder (shared by Ringkasan "hari ini" and Minggu tab) ---------- */
+   282→  function buildDayCard(date){
+   283→    const d = dow(date);
+   284→    const isToday = date === today();
+   285→    const scheduled = state.activities.filter(a => a.days.length>0 && a.days.includes(d));
+   286→    const flexible = state.activities.filter(a => a.days.length===0);
+   287→    const others = state.activities.filter(a => a.days.length>0 && !a.days.includes(d));
+   288→    const logs = dateLogs(date);
+   289→    const doneCount = logs.length;
+   290→
+   291→    const details = document.createElement("details");
+   292→    details.className = "day-card";
+   293→    details.dataset.date = date;
+   294→    details.open = openDays.has(date);
+   295→
+   296→    const scheduledCount = scheduled.length + flexible.length;
+   297→    details.innerHTML = `
+   298→      <summary>
+   299→        <span class="d-name ${isToday?'today':''}">${dayNames[d]}, ${fmtDateShort(date)}${isToday?' · hari ini':''}</span>
+   300→        <span class="d-meta">${scheduledCount} terjadwal · ${doneCount} selesai</span>
+   301→      </summary>
+   302→      <div class="day-body">
+   303→        ${scheduled.length ? taskGroupHtml("Terjadwal hari ini", scheduled, date, logs, false) : ""}
+   304→        ${flexible.length ? taskGroupHtml("Fleksibel (tanpa hari tetap)", flexible, date, logs, false) : ""}
+   305→        ${others.length ? taskGroupHtml("Aktivitas lain (opsional)", others, date, logs, true) : ""}
+   306→        ${!scheduled.length && !flexible.length && !others.length ? '<div class="empty-hint">Belum ada aktivitas. Tambah dulu di tab Pengaturan.</div>' : ""}
+   307→        <div class="energy-row">
+   308→          <span class="e-label">Energi hari ini:</span>
+   309→          <button class="energy-btn" data-e="1">↓</button>
+   310→          <button class="energy-btn" data-e="2">•</button>
+   311→          <button class="energy-btn" data-e="3">↑</button>
+   312→        </div>
+   313→      </div>
+   314→    `;
+   315→    const e = state.energy[date]||0;
+   316→    details.querySelectorAll(".energy-btn").forEach(b=>{
+   317→      if(Number(b.dataset.e)===e) b.classList.add("active");
+   318→    });
+   319→    return details;
+   320→  }
+   321→  function taskGroupHtml(title, acts, date, logs, compact){
+   322→    const rows = acts.map(a=>{
+   323→      const done = logs.some(l=>l.activityId===a.id);
+   324→      return `<div class="task-row ${compact?'compact':''}">
+   325→        <span class="chk ${done?'done':''}" data-toggle="${a.id}"></span>
+   326→        <span class="t-name">${escape(a.name)}</span>
+   327→        <span class="t-time">${a.time||''}</span>
+   328→        <span class="t-dur">${escape(a.duration||'')}</span>
+   329→        <span class="t-note" data-note="${a.id}">catatan</span>
+   330→      </div>`;
+   331→    }).join("");
+   332→    return `<div class="task-group-title">${title}</div>${rows}`;
+   333→  }
+   334→  function bindDayCardEvents(container){
+   335→    container.querySelectorAll("details.day-card").forEach(det=>{
+   336→      det.addEventListener("toggle", ()=>{
+   337→        if(det.open) openDays.add(det.dataset.date); else openDays.delete(det.dataset.date);
+   338→      });
+   339→      det.querySelectorAll("[data-toggle]").forEach(el=>{
+   340→        el.addEventListener("click", ()=> toggle(det.dataset.date, el.dataset.toggle));
+   341→      });
+   342→      det.querySelectorAll("[data-note]").forEach(el=>{
+   343→        el.addEventListener("click", ()=> openTaskModal(det.dataset.date, el.dataset.note));
+   344→      });
+   345→      det.querySelectorAll(".energy-btn").forEach(b=>{
+   346→        b.addEventListener("click", ()=>{
+   347→          state.energy[det.dataset.date] = Number(b.dataset.e);
+   348→          save(); render();
+   349→        });
+   350→      });
+   351→    });
+   352→  }
+   353→
+   354→  /* ---------- Minggu tab ---------- */
+   355→  function renderWeekRange(){
+   356→    $("#weekRange").textContent = fmtDateShort(state.selectedWeek) + " – " + fmtDateShort(addDays(state.selectedWeek,6));
+   357→  }
+   358→  $("#prevWeek").addEventListener("click", ()=>{ state.selectedWeek=addDays(state.selectedWeek,-7); save(); render(); });
+   359→  $("#nextWeek").addEventListener("click", ()=>{ state.selectedWeek=addDays(state.selectedWeek,7); save(); render(); });
+   360→  $("#gotoToday").addEventListener("click", ()=>{ state.selectedWeek=startOfWeek(today()); save(); render(); });
+   361→
+   362→  function renderDayList(){
+   363→    const list = $("#dayList"); list.innerHTML = "";
+   364→    for(let i=0;i<7;i++){
+   365→      const date = addDays(state.selectedWeek, i);
+   366→      list.appendChild(buildDayCard(date));
+   367→    }
+   368→    bindDayCardEvents(list);
+   369→  }
+   370→
+   371→  /* ---------- Review tab ---------- */
+   372→  function renderReview(){
+   373→    const r = state.reviews[state.selectedWeek] || {};
+   374→    ["Worked","Blocked","Next","Sentence"].forEach(k=>{
+   375→      const el = $("#review"+k);
+   376→      el.value = r[k.toLowerCase()] || "";
+   377→      el.onchange = ()=>{
+   378→        state.reviews[state.selectedWeek] = state.reviews[state.selectedWeek] || {};
+   379→        state.reviews[state.selectedWeek][k.toLowerCase()] = el.value;
+   380→        save();
+   381→      };
+   382→    });
+   383→  }
+   384→
+   385→  /* ---------- Pengaturan tab ---------- */
+   386→  function renderActivityList(){
+   387→    const list = $("#activityList"); list.innerHTML = "";
+   388→    state.activities.forEach(a=>{
+   389→      const scheduleText = a.days.length ? a.days.map(x=>dayShort[x]).join(" ") : "fleksibel";
+   390→      const row = document.createElement("div");
+   391→      row.className = "act-row";
+   392→      row.innerHTML = `
+   393→        <div><div class="a-name">${escape(a.name)}</div><div class="a-schedule">${escape(a.desc||'')}</div></div>
+   394→        <input type="number" min="1" value="${a.target}" data-target="${a.id}">
+   395→        <div class="a-schedule">${a.time?a.time+' · ':''}${escape(a.duration||'')}</div>
+   396→        <div class="a-schedule">${scheduleText}</div>
+   397→        <div class="a-actions"><span data-edit="${a.id}">edit</span><span data-remove="${a.id}">hapus</span></div>
+   398→      `;
+   399→      list.appendChild(row);
+   400→    });
+   401→    list.querySelectorAll("[data-target]").forEach(inp=>{
+   402→      inp.addEventListener("change", ()=>{
+   403→        const a = state.activities.find(x=>x.id===inp.dataset.target);
+   404→        if(a){ a.target = Math.max(1, Number(inp.value)||1); save(); render(); toast("Target diperbarui."); }
+   405→      });
+   406→    });
+   407→    list.querySelectorAll("[data-edit]").forEach(el=> el.addEventListener("click", ()=>openActivityModal(el.dataset.edit)));
+   408→    list.querySelectorAll("[data-remove]").forEach(el=> el.addEventListener("click", ()=>{
+   409→      if(state.activities.length<=1){ toast("Minimal satu aktivitas."); return; }
+   410→      if(!confirm("Hapus aktivitas ini beserta catatannya?")) return;
+   411→      const id = el.dataset.remove;
+   412→      state.activities = state.activities.filter(a=>a.id!==id);
+   413→      state.logs = state.logs.filter(l=>l.activityId!==id);
+   414→      save(); render(); toast("Aktivitas dihapus.");
+   415→    }));
+   416→  }
+   417→  $("#sundayReviewToggle").addEventListener("change", e=>{ state.sundayReview = e.target.checked; save(); });
+   418→
+   419→  /* ---------- Activity modal ---------- */
+   420→  function openActivityModal(id=null){
+   421→    editingActivityId = id;
+   422→    const a = id ? state.activities.find(x=>x.id===id) : null;
+   423→    $("#activityName").value = a?.name || "";
+   424→    $("#activityTarget").value = a?.target || 3;
+   425→    $("#activityDuration").value = a?.duration || "";
+   426→    $("#activityTime").value = a?.time || "";
+   427→    $("#activityDesc").value = a?.desc || "";
+   428→    $$("#activityDays input").forEach(c=> c.checked = (a?.days||[]).includes(Number(c.value)));
+   429→    $("#activityModalTitle").textContent = id ? "Edit aktivitas" : "Tambah aktivitas";
+   430→    $("#activitySubmit").textContent = id ? "Simpan" : "Tambah";
+   431→    $("#activityModal").classList.add("open");
+   432→  }
+   433→  $("#addActivityBtn").addEventListener("click", ()=>openActivityModal());
+   434→  $("#cancelActivity").addEventListener("click", ()=>$("#activityModal").classList.remove("open"));
+   435→  $("#activityForm").addEventListener("submit", e=>{
+   436→    e.preventDefault();
+   437→    const data = {
+   438→      name: $("#activityName").value.trim(),
+   439→      target: Math.max(1, Number($("#activityTarget").value)||1),
+   440→      duration: $("#activityDuration").value.trim(),
+   441→      time: $("#activityTime").value,
+   442→      days: $$("#activityDays input:checked").map(x=>Number(x.value)),
+   443→      desc: $("#activityDesc").value.trim(),
+   444→    };
+   445→    if(!data.name) return;
+   446→    if(editingActivityId){
+   447→      const a = state.activities.find(x=>x.id===editingActivityId);
+   448→      if(a) Object.assign(a, data);
+   449→      toast("Aktivitas diperbarui.");
+   450→    } else {
+   451→      state.activities.push({ id: uid(), ...data });
+   452→      toast("Aktivitas baru ditambahkan.");
+   453→    }
+   454→    save();
+   455→    $("#activityModal").classList.remove("open");
+   456→    e.target.reset();
+   457→    editingActivityId = null;
+   458→    render();
+   459→  });
+   460→
+   461→  /* ---------- Task/note modal ---------- */
+   462→  function populateTaskActivities(){
+   463→    $("#taskActivity").innerHTML = state.activities.map(a=>`<option value="${a.id}">${escape(a.name)}</option>`).join("");
+   464→  }
+   465→  function openTaskModal(date, activityId){
+   466→    populateTaskActivities();
+   467→    $("#taskDate").value = date || today();
+   468→    if(activityId) $("#taskActivity").value = activityId;
+   469→    const existing = state.logs.find(l=>l.date===$("#taskDate").value && l.activityId===$("#taskActivity").value);
+   470→    $("#taskNote").value = existing?.note || "";
+   471→    $("#taskModal").classList.add("open");
+   472→  }
+   473→  $("#cancelTask").addEventListener("click", ()=>$("#taskModal").classList.remove("open"));
+   474→  $("#taskForm").addEventListener("submit", e=>{
+   475→    e.preventDefault();
+   476→    const date = $("#taskDate").value, activityId = $("#taskActivity").value, note = $("#taskNote").value.trim();
+   477→    const existing = state.logs.find(x=>x.date===date && x.activityId===activityId);
+   478→    if(existing) existing.note = note;
+   479→    else state.logs.push({ id: uid(), date, activityId, note });
+   480→    save();
+   481→    $("#taskModal").classList.remove("open");
+   482→    toast("Tercatat.");
+   483→    render();
+   484→  });
+   485→
+   486→  /* ---------- Backup ---------- */
+   487→  $("#exportBtn").addEventListener("click", ()=>{
+   488→    const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+   489→    const a = document.createElement("a");
+   490→    a.href = URL.createObjectURL(blob); a.download = `ruang-tumbuh-${today()}.json`; a.click();
+   491→    URL.revokeObjectURL(a.href);
+   492→  });
+   493→  $("#importBtn").addEventListener("click", ()=>$("#fileInput").click());
+   494→  $("#fileInput").addEventListener("change", e=>{
+   495→    const f = e.target.files[0]; if(!f) return;
+   496→    const r = new FileReader();
+   497→    r.onload = ()=>{
+   498→      try{ state = normalize(JSON.parse(r.result)); save(); render(); toast("Cadangan berhasil dimuat."); }
+   499→      catch(err){ toast("File cadangan tidak valid."); }
+   500→    };
+   501→    r.readAsText(f);
+   502→    e.target.value = "";
+   503→  });
+   504→  $("#resetBtn").addEventListener("click", ()=>{
+   505→    if(confirm("Hapus semua progress Ruang Tumbuh di browser ini?")){
+   506→      state = defaultState(); save(); render(); toast("Tracker direset.");
+   507→    }
+   508→  });
+   509→  document.addEventListener("click", e=>{ if(e.target.classList.contains("modal-overlay")) e.target.classList.remove("open"); });
+   510→  document.addEventListener("keydown", e=>{ if(e.key==="Escape") $$(".modal-overlay").forEach(m=>m.classList.remove("open")); });
+   511→
+   512→  /* ---------- Master render ---------- */
+   513→  function render(){
+   514→    renderRingkasan();
+   515→    renderWeekRange();
+   516→    renderDayList();
+   517→    renderReview();
+   518→    renderActivityList();
+   519→    $("#sundayReviewToggle").checked = state.sundayReview;
+   520→  }
+   521→
+   522→  let state = load();
+   523→  render();
+   524→})();
+   525→</script>
+   526→</body>
+   527→</html>
+   528→
