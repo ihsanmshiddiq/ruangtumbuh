@@ -21,7 +21,7 @@ export function TodaySection() {
           <Sunrise className="w-3.5 h-3.5 text-rt-teal/80" aria-hidden="true" />
           hari ini
         </p>
-        <h2 className="font-[family-name:var(--font-fraunces)] text-2xl sm:text-3xl font-semibold tracking-[-0.02em] mt-2">
+        <h2 className="font-[family-name:var(--font-fraunces)] text-[1.35rem] xs:text-2xl sm:text-3xl font-semibold tracking-[-0.02em] mt-2 leading-[1.15]">
           {hariIni ?? <span className="text-muted-foreground">…</span>}
         </h2>
         <p className="font-[family-name:var(--font-fraunces)] italic text-muted-foreground mt-2 text-[0.92rem]">

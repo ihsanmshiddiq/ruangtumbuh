@@ -41,8 +41,8 @@ export function LoginScreen() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4 sm:p-6">
-      <div className="rt-sheet w-full max-w-md p-8 sm:p-10">
+    <main className="min-h-dvh flex items-center justify-center p-4 sm:p-6 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="rt-sheet w-full max-w-md p-6 sm:p-10">
         <div className="rt-glow-ring -top-28 -right-24 w-72 h-72" aria-hidden="true" />
 
         <div className="relative z-[1]">
@@ -52,7 +52,7 @@ export function LoginScreen() {
                 <Leaf className="w-4 h-4" aria-hidden="true" />
                 <span className="rt-kicker">ruang privat · dua anggota</span>
               </div>
-              <h1 className="font-[family-name:var(--font-fraunces)] text-4xl sm:text-[2.6rem] leading-[1.05] font-semibold tracking-[-0.03em]">
+              <h1 className="font-[family-name:var(--font-fraunces)] text-[1.9rem] xs:text-4xl sm:text-[2.6rem] leading-[1.05] font-semibold tracking-[-0.03em]">
                 Ruang Tumbuh
               </h1>
               <p className="font-[family-name:var(--font-fraunces)] italic text-muted-foreground mt-3 text-[0.95rem]">
@@ -72,7 +72,7 @@ export function LoginScreen() {
             </div>
           </div>
 
-          <div className="h-px bg-border my-7" aria-hidden="true" />
+          <div className="h-px bg-border my-5 sm:my-7" aria-hidden="true" />
 
           <form onSubmit={handleSubmit} noValidate>
             <div className="space-y-4">
@@ -112,9 +112,9 @@ export function LoginScreen() {
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5 text-muted-foreground hover:text-foreground transition-colors rounded-md"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                   </button>
                 </div>
               </div>
@@ -128,7 +128,7 @@ export function LoginScreen() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full h-11 font-semibold shadow-[0_10px_24px_rgba(111,95,247,0.22)] hover:brightness-110 transition-all"
+                className="w-full h-12 font-semibold text-[0.95rem] shadow-[0_10px_24px_rgba(111,95,247,0.22)] hover:brightness-110 transition-all active:brightness-95"
               >
                 {loading ? (
                   <>
@@ -142,7 +142,7 @@ export function LoginScreen() {
             </div>
           </form>
 
-          <div className="h-px bg-border my-7" aria-hidden="true" />
+          <div className="h-px bg-border my-5 sm:my-7" aria-hidden="true" />
 
           <p className="rt-fine text-center">
             Tanpa pendaftaran publik. Hanya dua orang yang ditunjuk pemilik workspace

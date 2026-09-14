@@ -4,6 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Breakpoint ekstra untuk ponsel modern (390–430px) vs kecil (320–375px) */
+  --breakpoint-xs: 400px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-work-sans), ui-sans-serif, system-ui, sans-serif;
@@ -98,6 +100,11 @@
   }
   html {
     color-scheme: dark;
+    /* PWA standalone: cegah teks terseleksi & pan-zoom tidak sengaja saat
+       interaksi sentuh cepat; pinch-zoom aksesibilitas tetap diizinkan
+       browser via gesture sistem. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   body {
     @apply text-foreground;
@@ -109,6 +116,40 @@
       linear-gradient(180deg, #0b0d12 0%, #0e1016 46%, #0b0d12 100%);
     background-attachment: fixed;
   }
+  /* ── Sentuhan pertama (mobile-first) ───────────────────────────────
+     Semua elemen interaktif: tanpa kilap abu-abu iOS, tanpa delay tap,
+     dan fokus keyboard yang tetap terlihat jelas di desktop. */
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation; /* hilangkan delay 300ms di browser lama */
+  }
+  /* Perbesar bidang sentuh tanpa mengubah visual: pseudo-area tampil hanya
+     di perangkat sentuh (pointer kasar). */
+  @media (pointer: coarse) {
+    button:not([class*="h-"]):not([class*="p-"]) {
+      min-height: 44px;
+    }
+  }
+  /* iOS memperkecil input saat font < 16px lalu zoom-kan otomatis —
+     hindari zoom memaksa saat Tantri mengisi form di ponselnya. */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
   /* Scrollbar tenang, konsisten gelap */
   ::-webkit-scrollbar {
     width: 10px;
@@ -163,6 +204,16 @@
     text-transform: uppercase;
     color: #69717f;
   }
+  /* Gulir horizontal yang disengaja (pemilih hari, daftar chip) —
+     tanpa scrollbar terlihat di ponsel; tetap bisa digulir via sentuhan. */
+  .rt-no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .rt-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .rt-glow-ring {
     position: absolute;
     border-radius: 9999px;
@@ -171,5 +222,16 @@
       0 0 0 28px rgba(139, 124, 255, 0.025),
       0 0 0 56px rgba(139, 124, 255, 0.018);
     pointer-events: none;
+  }
+}
+
+/* Hormati preferensi gerakan minim — PWA terasa tenang, bukan penuh animasi. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

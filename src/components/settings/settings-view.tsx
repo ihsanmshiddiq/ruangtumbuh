@@ -11,6 +11,7 @@ import {
   Palette,
   DatabaseBackup,
   ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,7 +93,7 @@ export function SettingsView({ session }: { session: SessionContext }) {
     <section aria-label="Pengaturan" className="space-y-6 max-w-3xl">
       <div>
         <p className="rt-kicker">pengaturan</p>
-        <h2 className="font-[family-name:var(--font-fraunces)] text-2xl sm:text-3xl font-semibold tracking-[-0.02em] mt-2">
+        <h2 className="font-[family-name:var(--font-fraunces)] text-[1.35rem] xs:text-2xl sm:text-3xl font-semibold tracking-[-0.02em] mt-2 leading-[1.15]">
           Profil, workspace &amp; data
         </h2>
       </div>
@@ -214,6 +215,39 @@ export function SettingsView({ session }: { session: SessionContext }) {
           )}
           Ekspor data saya
         </Button>
+      </div>
+
+      {/* ── Aplikasi (PWA) ─────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-border bg-white/[0.018] p-5 sm:p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Smartphone className="w-4 h-4 text-rt-teal" aria-hidden="true" />
+          <h3 className="font-semibold text-[0.95rem]">Aplikasi di ponsel</h3>
+        </div>
+        <p className="text-[0.86rem] text-muted-foreground leading-relaxed mb-4">
+          Ruang Tumbuh bisa dipasang seperti aplikasi — dibuka langsung dari layar
+          utama, tanpa address bar browser.
+        </p>
+        <div className="space-y-3">
+          <div className="rounded-xl border border-border/70 bg-white/[0.02] px-4 py-3.5">
+            <p className="text-[0.84rem] font-medium mb-1">Android · Chrome</p>
+            <p className="text-[0.78rem] text-muted-foreground leading-relaxed">
+              Ketuk menu titik tiga di kanan atas, lalu pilih "Tambahkan ke layar
+              utama" atau "Pasang aplikasi".
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-white/[0.02] px-4 py-3.5">
+            <p className="text-[0.84rem] font-medium mb-1">iPhone · Safari</p>
+            <p className="text-[0.78rem] text-muted-foreground leading-relaxed">
+              Ketuk tombol Bagikan (kotak dengan panah ke atas), lalu gulir dan pilih
+              "Tambahkan ke Layar Utama".
+            </p>
+          </div>
+          <p className="rt-fine flex items-start gap-2">
+            <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+            Pemasangan hanya menyimpan aplikasinya — data tetap terlindungi sesi dan
+            tidak pernah disimpan di cache publik perangkat.
+          </p>
+        </div>
       </div>
 
       {/* ── Akun ───────────────────────────────────────────────────── */}

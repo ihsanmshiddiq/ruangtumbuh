@@ -23,7 +23,7 @@ export function ComingSection({
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="rt-kicker">{phase} · hadir selanjutnya</p>
-          <h2 className="font-[family-name:var(--font-fraunces)] text-2xl sm:text-3xl font-semibold tracking-[-0.02em] mt-2 flex items-center gap-3">
+          <h2 className="font-[family-name:var(--font-fraunces)] text-[1.35rem] xs:text-2xl sm:text-3xl font-semibold tracking-[-0.02em] mt-2 flex items-center gap-3 leading-[1.15]">
             <Icon className="w-6 h-6 text-rt-violet" aria-hidden="true" />
             {title}
           </h2>

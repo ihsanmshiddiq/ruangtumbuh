@@ -15,6 +15,7 @@ import type { SectionId, SessionContext } from "@/lib/types";
 import { TodaySection } from "@/components/sections/today-section";
 import { ComingSection } from "@/components/sections/coming-section";
 import { SettingsView } from "@/components/settings/settings-view";
+import { OfflineBanner, InstallPromptCard } from "@/components/pwa/pwa-client";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -87,7 +88,15 @@ export function AppShell({ session }: { session: SessionContext }) {
   const isPreview = session.authMode === "bypass";
 
   return (
-    <div className="min-h-screen flex w-full">
+    <div className="min-h-dvh flex w-full">
+      {/* Lewati ke konten — navigasi keyboard/screen reader di desktop */}
+      <a
+        href="#konten-utama"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-rt-violet/20 focus:border focus:border-rt-violet/40 focus:px-4 focus:py-2 focus:text-sm"
+      >
+        Langsung ke konten
+      </a>
+
       {/* ── Sidebar (desktop) ─────────────────────────────────────────── */}
       <aside className="hidden lg:flex flex-col w-[264px] shrink-0 border-r border-border bg-[#0e1016]/80 backdrop-blur-sm sticky top-0 h-screen p-5">
         <div className="flex items-center gap-2 text-rt-teal/80">
@@ -156,9 +165,9 @@ export function AppShell({ session }: { session: SessionContext }) {
       </aside>
 
       {/* ── Area konten ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-screen min-w-0">
-        {/* Header mobile */}
-        <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-[#0b0d12]/85 backdrop-blur-md">
+      <div className="flex-1 flex flex-col min-h-dvh min-w-0">
+        {/* Header mobile — napas di bawah safe-area atas (notch/status bar) */}
+        <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 border-b border-border bg-[#0b0d12]/85 backdrop-blur-md">
           <div className="flex items-center gap-2 min-w-0">
             <Leaf className="w-4 h-4 text-rt-teal/80 shrink-0" aria-hidden="true" />
             <span className="font-[family-name:var(--font-fraunces)] font-semibold tracking-[-0.02em] truncate">
@@ -177,7 +186,10 @@ export function AppShell({ session }: { session: SessionContext }) {
           </div>
         </header>
 
-        <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-28 lg:pb-10">
+        <main
+          id="konten-utama"
+          className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-5 sm:pt-8 space-y-6 pb-[calc(4.6rem+env(safe-area-inset-bottom))] lg:pb-10 lg:space-y-0 lg:py-8"
+        >
           {active === "today" && <TodaySection />}
           {active === "planner" && (
             <ComingSection
@@ -239,15 +251,19 @@ export function AppShell({ session }: { session: SessionContext }) {
             />
           )}
           {active === "settings" && <SettingsView session={session} />}
+
+          {/* PWA: status koneksi + ajakan memasang yang halus, tanpa interupsi */}
+          <OfflineBanner className="lg:hidden" />
+          <InstallPromptCard className="lg:hidden" />
         </main>
 
         {/* Footer — menempel di bawah saat konten pendek, terdorong alami saat panjang */}
-        <footer className="mt-auto px-4 sm:px-6 pb-24 lg:pb-6">
+        <footer className="mt-auto px-4 sm:px-6 pb-[calc(4.6rem+env(safe-area-inset-bottom))] lg:pb-6">
           <div className="max-w-5xl mx-auto border-t border-border pt-4 flex flex-wrap items-center justify-between gap-2">
             <p className="rt-fine">
               {session.workspace.name} · data hanya untuk dua anggota workspace ini.
             </p>
-            <p className="rt-fine">Fase 1 — fondasi & akses privat.</p>
+            <p className="rt-fine">Fase 2 — responsif mobile & PWA.</p>
           </div>
         </footer>
 
@@ -263,12 +279,20 @@ export function AppShell({ session }: { session: SessionContext }) {
                 onClick={() => goTo(id)}
                 aria-current={active === id ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-2.5 text-[0.6rem] font-medium transition-colors min-h-[44px]",
-                  active === id ? "text-rt-lilac" : "text-muted-foreground hover:text-foreground"
+                  "flex flex-col items-center justify-start gap-1 pt-2.5 pb-1.5 h-14 text-[0.6rem] font-medium transition-colors select-none touch-manipulation",
+                  active === id ? "text-rt-lilac" : "text-muted-foreground active:text-foreground"
                 )}
               >
-                <Icon className="w-[18px] h-[18px]" />
+                <Icon className="w-[19px] h-[19px]" aria-hidden="true" />
                 {label}
+                {/* Penanda aktif berbentuk titik — bukan hanya warna teks */}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "w-1 h-1 rounded-full transition-opacity",
+                    active === id ? "bg-rt-lilac opacity-100" : "opacity-0"
+                  )}
+                />
               </button>
             ))}
           </div>

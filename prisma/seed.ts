@@ -36,7 +36,7 @@ async function main() {
       id: crypto.randomUUID(),
       email: partnerEmail,
       passwordHash: hashPassword(partnerPassword),
-      displayName: "Mitra",
+      displayName: "Tantri",
     },
   });
 
