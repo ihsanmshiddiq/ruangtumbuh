@@ -290,13 +290,24 @@ export async function deleteOccurrence(ctx: Ctx, id: string): Promise<boolean> {
 export async function setOccurrenceStatus(
   ctx: Ctx,
   id: string,
-  status: "planned" | "done" | "skipped"
+  status: "planned" | "done" | "skipped",
+  actualDurationMinutes?: number | null
 ): Promise<boolean> {
   const existing = await db.activityLog.findFirst({
     where: { id, workspaceId: ctx.workspace.id, userId: ctx.user.id },
   });
   if (!existing) return false;
-  await db.activityLog.update({ where: { id: existing.id }, data: { status } });
+  const data: { status: string; actualDurationMinutes?: number } = { status };
+  // Durasi aktual hanya disimpan bila dicatat (0–1440 menit); null diabaikan.
+  if (
+    typeof actualDurationMinutes === "number" &&
+    Number.isInteger(actualDurationMinutes) &&
+    actualDurationMinutes >= 0 &&
+    actualDurationMinutes <= 1440
+  ) {
+    data.actualDurationMinutes = actualDurationMinutes;
+  }
+  await db.activityLog.update({ where: { id: existing.id }, data });
   await db.weeklyPlanEntry.updateMany({
     where: {
       workspaceId: ctx.workspace.id,

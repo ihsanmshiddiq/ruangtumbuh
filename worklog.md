@@ -158,3 +158,22 @@ Stage Summary:
 - Fitur inti HIDUP: Today menjawab "hari ini ngapain aja", Planner dengan reschedule natural (preferensi ≠ kejadian), Buku Kas lengkap (transaksi/kategori/alokasi/target), Refleksi berdua + komentar, Chat polling.
 - Weekly review + insight tersedia di payload refleksi; tampilan lanjutan + perbandingan mingguan menunggu arah fase berikutnya.
 - Keamanan tetap: tanpa registrasi publik, semua query ber-scope workspace, data uji dibersihkan.
+
+---
+Task ID: Fase-4 (Weekly Review + Insight berbasis data)
+Agent: Buffy (Freebuff)
+Task: Weekly Review penuh — navigasi minggu, ringkasan akurat, durasi direncanakan-vs-aktual, review perpindahan & skipped, energi hati-hati, perbandingan keuangan dua minggu, insight transparan, refleksi + komentar — tanpa skor, tanpa gamifikasi, tanpa AI eksternal.
+
+Work Log:
+- Server (reflection.ts): definisi penghitungan dijelasin biar nggak dobel — kejadian lama yang udah dipindah (status "rescheduled") dianggap bagian dari kejadian tujuannya, jadi "planned" = rencana final; "dipindah" dihitung terpisah. moves = pasangan nyata (kejadian baru bawa rescheduledFrom + kejadian lama status rescheduled); skippedList = daftar kejadian dilewati; lowestEnergy = hari energi terendah + berapa kejadian dipindah di hari itu; durasi aktual hanya dihitung kalau memang dicatat (actualRecorded), nggak nyontek rencana. getFinanceTwoWeeks = SATU query rentang 14 hari lalu dibagi dua minggu (efisien, tanpa query per minggu). buildInsights: tiap kalimat bisa dilacak ke angkanya, pakai rupiah() dari format.ts (satu sumber kebenaran), bahasa korelasi hati-hati ("tercatat bersamaan, belum tentu sebab-akibat"), ada fallback "tidak ada pola yang cukup jelas".
+- planner.ts: setOccurrenceStatus sekarang terima actualDurationMinutes (0–1440, integer) — durasi nyata dicatat pas aktivitas selesai.
+- API: GET /api/reflection balikin finance dua minggu + reviewStatus ("not-started" | "done" — selesai kalau refleksi sendiri udah diisi); PATCH /api/occurrences terima actualDurationMinutes; POST /api/categories bisa terima bucket "income" buat kategori pemasukan (bug ketemu pas smoke test).
+- UI reflection-section dirombak jadi REVIEW MINGGUAN: navigasi minggu (mundur/maju/"minggu ini", riwayat bisa dibuka), chip status review, urutan data→pola→refleksi: (1) ringkasan aktivitas + per aktivitas, (2) waktu direncanakan vs aktual + selisih dengan catatan netral, (3) daftar perpindahan & yang dilewati (tanpa nebak-nebab penyebab), (4) energi per orang (rata-rata, strip harian, catatan korelasi hati-hati), (5) keuangan minggu ini + banding minggu lalu bahasa netral, (6) "pola yang terlihat" — insight transparan, (7) refleksi 5 pertanyaan (semua opsional), (8) refleksi pasangan, (9) komentar. planner-section: tombol "Selesai" sekarang buka drawer durasi aktual (chip cepat + input manual, bisa skip) — Today tetap satu-tap biar cepat.
+- Bug fix dari smoke test: (1) kategori income ditolak karena enum bucket kurang "income"; (2) format dobel minus "-Rp200.000 lebih rendah"; (3) kejadian rescheduled kehitung dobel di planned.
+- Verifikasi: tsc & eslint bersih; smoke test Fase 4 18/18 (minggu penuh, reschedule, skipped, energi, transaksi dua arah, dua minggu perbandingan, status review, riwayat minggu lalu, minggu kosong tanpa NaN); data uji [P4] dibersihkan; next build sukses.
+
+Stage Summary:
+- Weekly Review hidup: angka akurat dari database, tiap insight bisa ditelusuri, tanpa skor produktivitas/gamifikasi/nasihat AI.
+- Riwayat minggu bisa dibuka lewat navigasi; data shared vs personal ngikutin schema (review = personal, aktivitas+keuangan = workspace).
+- Sengaja ditunda: transisi "minggu depan" interaktif (copy rencana/ubah target) — baru catatan refleksi; ekspor review; chart visual.
+- Catatan: build standalone cp -r masih gagal di Windows (pre-existing, di luar cakupan).

@@ -7,7 +7,7 @@ import { handle } from "@/server/api";
 import { requireContext } from "@/server/context";
 import {
   getWeekReflections, upsertReflection, listComments, addComment,
-  getWeeklyReview, buildInsights,
+  getWeeklyReview, buildInsights, getFinanceTwoWeeks,
 } from "@/server/reflection";
 import { isISODate, weekStartOf } from "@/lib/dates";
 
@@ -20,12 +20,25 @@ export async function GET(req: NextRequest) {
     const ctx = await requireContext();
     const raw = req.nextUrl.searchParams.get("week") ?? "";
     const week = isISODate(raw) ? weekStartOf(raw) : weekStartOf(new Date().toISOString().slice(0, 10));
-    const [reflections, comments, review] = await Promise.all([
+    const [reflections, comments, review, finance] = await Promise.all([
       getWeekReflections(ctx, week),
       listComments(ctx, week),
       getWeeklyReview(ctx, week),
+      getFinanceTwoWeeks(ctx, week),
     ]);
-    return { week, myUserId: ctx.user.id, reflections, comments, review, insights: buildInsights(review, week) };
+    // Status review sederhana: "selesai" bila refleksi sendiri sudah diisi.
+    const ownReflection = reflections.find((r) => r.userId === ctx.user.id);
+    const hasOwn = !!ownReflection && [ownReflection.worked, ownReflection.blocked, ownReflection.nextAdjustment, ownReflection.weeklySentence, ownReflection.gratitude].some((v) => v.trim() !== "");
+    return {
+      week,
+      myUserId: ctx.user.id,
+      reflections,
+      comments,
+      review,
+      finance,
+      insights: buildInsights(review, week, finance),
+      reviewStatus: hasOwn ? "done" : "not-started",
+    };
   });
 }
 

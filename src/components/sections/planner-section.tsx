@@ -14,7 +14,7 @@ import { OccurrenceCard } from "@/components/planner/occurrence-card";
 import { RescheduleDrawer } from "@/components/planner/reschedule-drawer";
 import { SectionHeader, EmptyState, Panel, TinySpinner } from "@/components/shared/ui-bits";
 import { useApi, apiFetch } from "@/lib/client";
-import { weekDates, weekStartOf, addDays, tanggalIndo, tanggalPendek, HARI_SINGKAT, DOW_TO_WEEK_INDEX } from "@/lib/dates";
+import { weekDates, weekStartOf, addDays, tanggalIndo, tanggalPendek, durasiMenit, HARI_SINGKAT, DOW_TO_WEEK_INDEX } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { WeekView, OccurrenceDTO } from "@/server/planner";
 
@@ -27,6 +27,7 @@ export function PlannerSection() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [resched, setResched] = useState<OccurrenceDTO | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [durationTarget, setDurationTarget] = useState<OccurrenceDTO | null>(null);
 
   const dates = weekDates(data?.weekStart ?? anchor);
   const byDow = useMemo(() => {
@@ -42,6 +43,12 @@ export function PlannerSection() {
   );
 
   async function setStatus(occ: OccurrenceDTO, status: "done" | "skipped" | "planned") {
+    // "Selesai" di Perencana membuka catatan durasi aktual (untuk review);
+    // di Today tetap satu-tap agar cepat.
+    if (status === "done") {
+      setDurationTarget(occ);
+      return;
+    }
     setBusyId(occ.id);
     try {
       await apiFetch("/api/occurrences", {
@@ -50,7 +57,6 @@ export function PlannerSection() {
       });
       toast({
         title:
-          status === "done" ? `Ditandai selesai: ${occ.activityName}` :
           status === "skipped" ? `${occ.activityName} dilewati — tidak apa-apa.` :
           `${occ.activityName} kembali direncanakan`,
       });
@@ -217,7 +223,123 @@ export function PlannerSection() {
           await refetch();
         }}
       />
+
+      <DurationDrawer
+        occ={durationTarget}
+        onOpenChange={(v) => !v && setDurationTarget(null)}
+        onSaved={async (msg) => {
+          setDurationTarget(null);
+          toast({ title: msg });
+          await refetch();
+        }}
+      />
     </section>
+  );
+}
+
+/* ── Catatan durasi aktual saat menandai selesai ── */
+
+function DurationDrawer({
+  occ,
+  onOpenChange,
+  onSaved,
+}: {
+  occ: OccurrenceDTO | null;
+  onOpenChange: (v: boolean) => void;
+  onSaved: (msg: string) => void;
+}) {
+  const [minutes, setMinutes] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const planned = occ?.plannedDurationMinutes ?? null;
+  const chips = [
+    ...(planned ? [{ label: durasiMenit(planned) ?? "", value: planned }] : []),
+    { label: "15 mnt", value: 15 },
+    { label: "30 mnt", value: 30 },
+    { label: "1 jam", value: 60 },
+    { label: "1,5 jam", value: 90 },
+    { label: "2 jam", value: 120 },
+  ].filter((c, i, arr) => arr.findIndex((x) => x.value === c.value) === i);
+
+  async function submit(withDuration: boolean) {
+    if (!occ) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = { id: occ.id, status: "done" };
+      if (withDuration && minutes) body.actualDurationMinutes = Number(minutes.replace(/\D/g, ""));
+      await apiFetch("/api/occurrences", { method: "PATCH", body: JSON.stringify(body) });
+      onSaved(withDuration && minutes ? `Selesai: ${occ.activityName} (${durasiMenit(Number(minutes))})` : `Ditandai selesai: ${occ.activityName}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal menyimpan.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Drawer open={occ !== null} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[70dvh]">
+        {occ && (
+          <div className="mx-auto w-full max-w-md px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto">
+            <DrawerHeader className="p-0 pt-1 pb-3 text-left">
+              <DrawerTitle className="font-[family-name:var(--font-fraunces)] text-lg">
+                Selesai: {occ.activityName}
+              </DrawerTitle>
+              <DrawerDescription>
+                Berapa lama benar-benar dikerjakan? Boleh dilewati — cuma bahan review mingguan.
+              </DrawerDescription>
+            </DrawerHeader>
+
+            <div className="flex flex-wrap gap-1.5">
+              {chips.map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setMinutes(String(c.value))}
+                  aria-pressed={minutes === String(c.value)}
+                  className={cn(
+                    "min-h-10 rounded-lg border px-3 text-[0.8rem] font-medium transition-colors",
+                    minutes === String(c.value)
+                      ? "border-rt-violet/50 bg-rt-violet/15 text-foreground"
+                      : "border-border text-muted-foreground active:bg-white/[0.04]"
+                  )}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3">
+              <Label htmlFor="actual-minutes" className="rt-kicker">atau tulis menitnya</Label>
+              <Input
+                id="actual-minutes"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={1440}
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ""))}
+                placeholder="mis. 45"
+                className="mt-1.5 h-11"
+              />
+            </div>
+
+            {error && <p role="alert" className="text-sm text-destructive mt-3">{error}</p>}
+
+            <div className="mt-5 flex gap-2">
+              <Button variant="outline" className="flex-1 h-11" onClick={() => submit(false)} disabled={saving}>
+                Selesai tanpa catat
+              </Button>
+              <Button className="flex-[2] h-11 font-semibold" onClick={() => submit(true)} disabled={saving || !minutes}>
+                {saving && <TinySpinner />}
+                Simpan durasi
+              </Button>
+            </div>
+          </div>
+        )}
+      </DrawerContent>
+    </Drawer>
   );
 }
 

@@ -2,7 +2,8 @@
 // SEMUA query difilter workspaceId — ekuivalen RLS.
 import { db } from "@/lib/db";
 import type { SessionContext } from "@/lib/types";
-import { weekDates } from "@/lib/dates";
+import { weekDates, addDays } from "@/lib/dates";
+import { rupiah } from "@/lib/format";
 import { getWeek } from "@/server/planner";
 
 type Ctx = SessionContext;
@@ -139,33 +140,65 @@ export type WeeklyReview = {
   perActivity: {
     activityId: string; name: string;
     planned: number; done: number;
-    plannedMinutes: number; actualMinutes: number;
+    plannedMinutes: number; actualMinutes: number; actualRecorded: number;
   }[];
   energyByUser: { userName: string; days: { date: string; level: number }[] }[];
+  /** Riwayat perpindahan nyata: dari tanggal asal → tanggal tujuan. */
+  moves: { activityName: string; from: string; to: string }[];
+  /** Daftar kejadian yang dilewati (tanpa penyebab yang dikarang). */
+  skippedList: { activityName: string; date: string }[];
+  /** Hari dengan energi terendah (untuk catatan hati-hati, bukan klaim). */
+  lowestEnergy: { date: string; level: number } | null;
+  rescheduledOnLowestEnergy: number;
 };
 
 export async function getWeeklyReview(ctx: Ctx, weekStart: string): Promise<WeeklyReview> {
   const week = await getWeek(ctx, weekStart);
   const occ = week.occurrences;
-  const planned = occ.length;
-  const done = occ.filter((o) => o.status === "done").length;
-  const rescheduled = occ.filter((o) => o.status === "rescheduled").length;
-  const skipped = occ.filter((o) => o.status === "skipped").length;
+  // Definisi jujur agar tidak dihitung dua kali: kejadian asal yang sudah
+  // dipindah (status "rescheduled") BUKAN rencana terpisah — ia "menjadi"
+  // kejadian tujuan. "Dipindah" dihitung terpisah sebagai jumlah perubahan.
+  const finalOcc = occ.filter((o) => o.status !== "rescheduled");
+  const planned = finalOcc.length;
+  const done = finalOcc.filter((o) => o.status === "done").length;
+  const rescheduled = occ.length - finalOcc.length;
+  const skipped = finalOcc.filter((o) => o.status === "skipped").length;
 
   const byActivity = new Map<string, WeeklyReview["perActivity"][number]>();
-  for (const o of occ) {
+  for (const o of finalOcc) {
     let entry = byActivity.get(o.activityId);
     if (!entry) {
-      entry = { activityId: o.activityId, name: o.activityName, planned: 0, done: 0, plannedMinutes: 0, actualMinutes: 0 };
+      entry = { activityId: o.activityId, name: o.activityName, planned: 0, done: 0, plannedMinutes: 0, actualMinutes: 0, actualRecorded: 0 };
       byActivity.set(o.activityId, entry);
     }
     entry.planned += 1;
     if (o.status === "done") {
       entry.done += 1;
-      entry.actualMinutes += o.actualDurationMinutes ?? o.plannedDurationMinutes ?? 0;
       entry.plannedMinutes += o.plannedDurationMinutes ?? 0;
+      // Durasi aktual HANYA dihitung bila memang dicatat — tidak menyalin rencana.
+      if (o.actualDurationMinutes != null) {
+        entry.actualMinutes += o.actualDurationMinutes;
+        entry.actualRecorded += 1;
+      }
     }
   }
+
+  // Perpindahan nyata: kejadian baru membawa rescheduledFrom = tanggal asal;
+  // pasangkan dengan kejadian asal (status rescheduled) pada tanggal itu.
+  const moves: WeeklyReview["moves"] = [];
+  for (const o of occ) {
+    if (!o.rescheduledFrom) continue;
+    const original = occ.find((x) => x.activityId === o.activityId && x.date === o.rescheduledFrom && x.status === "rescheduled");
+    if (original) {
+      moves.push({ activityName: o.activityName, from: original.date, to: o.date });
+    }
+  }
+  moves.sort((a, b) => a.from.localeCompare(b.from));
+
+  const skippedList = occ
+    .filter((o) => o.status === "skipped")
+    .map((o) => ({ activityName: o.activityName, date: o.date }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
   const energyByUser = Object.entries(week.energyByUser).map(([userId, days]) => ({
@@ -173,39 +206,112 @@ export async function getWeeklyReview(ctx: Ctx, weekStart: string): Promise<Week
     days: days.sort((a, b) => a.date.localeCompare(b.date)),
   }));
 
+  // Hari energi terendah dari semua catatan minggu itu (pilih paling awal bila seri).
+  const allEnergy = energyByUser.flatMap((u) => u.days);
+  let lowestEnergy: WeeklyReview["lowestEnergy"] = null;
+  for (const d of allEnergy) {
+    if (!lowestEnergy || d.level < lowestEnergy.level || (d.level === lowestEnergy.level && d.date < lowestEnergy.date)) {
+      lowestEnergy = { date: d.date, level: d.level };
+    }
+  }
+  const rescheduledOnLowestEnergy = lowestEnergy
+    ? occ.filter((o) => o.status === "rescheduled" && o.date === lowestEnergy!.date).length
+    : 0;
+
   return {
     weekStart: week.weekStart,
     planned, done, rescheduled, skipped,
     percent: planned > 0 ? Math.round((done / planned) * 100) : 0,
     perActivity: [...byActivity.values()].sort((a, b) => b.done - a.done),
     energyByUser,
+    moves,
+    skippedList,
+    lowestEnergy,
+    rescheduledOnLowestEnergy,
   };
 }
 
-/** Insight berbasis data nyata — tanpa klaim sebab-akibat, tanpa motivasi generik. */
-export function buildInsights(review: WeeklyReview, weekStart: string): string[] {
+/* ── Keuangan dua minggu sekaligus — SATU query rentang 14 hari ─────── */
+
+export type WeekFinance = {
+  income: number;
+  expense: number;
+  diff: number;
+  txCount: number;
+};
+
+export type FinanceTwoWeeks = { current: WeekFinance; previous: WeekFinance };
+
+export async function getFinanceTwoWeeks(ctx: Ctx, weekStart: string): Promise<FinanceTwoWeeks> {
   const dates = weekDates(weekStart);
+  const prevDates = weekDates(addDays(weekStart, -7));
+  const from = prevDates[0];
+  const to = dates[6];
+  const rows = await db.transaction.findMany({
+    where: { workspaceId: ctx.workspace.id, date: { gte: from, lte: to } },
+    select: { date: true, type: true, amount: true },
+  });
+  const curFrom = dates[0];
+  const sum = (list: typeof rows): WeekFinance => {
+    let income = 0, expense = 0;
+    for (const r of list) {
+      if (r.type === "income") income += r.amount;
+      else expense += r.amount;
+    }
+    return { income, expense, diff: income - expense, txCount: list.length };
+  };
+  return {
+    current: sum(rows.filter((r) => r.date >= curFrom)),
+    previous: sum(rows.filter((r) => r.date < curFrom)),
+  };
+}
+
+/**
+ * Insight berbasis data nyata — setiap kalimat bisa ditelusuri ke angka.
+ * Tanpa klaim sebab-akibat, tanpa motivasi generik, tanpa AI eksternal.
+ */
+export function buildInsights(review: WeeklyReview, weekStart: string, finance?: FinanceTwoWeeks): string[] {
   const insights: string[] = [];
   if (review.planned === 0) return insights;
 
-  const doneNames = review.perActivity.filter((a) => a.done > 0);
-  if (doneNames.length > 0) {
-    const a = doneNames[0];
-    insights.push(`${a.done} dari ${a.planned} sesi ${a.name} minggu ini selesai.`);
+  // 1) Breakdown aktivitas terlihat
+  const top = review.perActivity.find((a) => a.done > 0);
+  if (top) {
+    insights.push(`${top.done} dari ${top.planned} sesi ${top.name} minggu ini selesai.`);
   }
-  if (review.rescheduled > 0) {
-    const resAct = new Map<string, number>();
-    // hitung dari occurrences lewat review per-activity tidak cukup — pakai agregat sederhana
-    insights.push(`${review.rescheduled} kejadian dipindahkan minggu ini.`);
+
+  // 2) Perpindahan
+  if (review.moves.length > 0) {
+    insights.push(`${review.moves.length} kejadian dipindahkan minggu ini.`);
   }
-  const energies = review.energyByUser.flatMap((u) => u.days.map((d) => d.level));
-  if (energies.length >= 3) {
-    const avg = energies.reduce((s, v) => s + v, 0) / energies.length;
+
+  // 3) Energi — bahasa hati-hati, korelasi bukan sebab-akibat
+  const allEnergy = review.energyByUser.flatMap((u) => u.days);
+  if (allEnergy.length >= 3) {
+    const avg = allEnergy.reduce((s, d) => s + d.level, 0) / allEnergy.length;
     if (avg < 1.7) insights.push("Rata-rata energi minggu ini cenderung rendah.");
     else if (avg > 2.4) insights.push("Rata-rata energi minggu ini cenderung tinggi.");
+    if (review.lowestEnergy && review.rescheduledOnLowestEnergy > 0) {
+      insights.push(
+        `Pada hari dengan energi terendah, ${review.rescheduledOnLowestEnergy} kejadian juga dipindah — dua hal ini tercatat bersamaan.`
+      );
+    }
   }
-  if (review.percent >= 80 && review.planned >= 3) {
-    insights.push(`Selesai ${review.percent}% dari rencana minggu ${dates[0].slice(8)}–${dates[6].slice(8)}.`);
+
+  // 4) Keuangan — perbandingan netral minggu vs minggu lalu
+  if (finance && finance.previous.txCount > 0 && finance.current.txCount > 0) {
+    const delta = finance.current.expense - finance.previous.expense;
+    if (delta !== 0) {
+      insights.push(
+        delta < 0
+          ? `Pengeluaran minggu ini ${rupiah(Math.abs(delta))} lebih rendah dibanding minggu lalu.`
+          : `Pengeluaran minggu ini ${rupiah(delta)} lebih tinggi dibanding minggu lalu.`
+      );
+    }
   }
-  return insights.slice(0, 3);
+
+  if (insights.length === 0) {
+    insights.push("Tidak ada pola yang cukup jelas minggu ini.");
+  }
+  return insights.slice(0, 4);
 }
