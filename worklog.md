@@ -79,3 +79,21 @@ Stage Summary:
 - Fase 1 SELESAI & terverifikasi end-to-end. Demo: ihsan@ruangtumbuh.app / mitra@ruangtumbuh.app (password di .env).
 - Produksi Supabase siap: supabase/schema.sql (14 tabel, 48 policy RLS, trigger profil, constraint alokasi=100) + supabase/SETUP.md (10 langkah, bahasa Indonesia).
 - Fase 2 berikutnya: Today + Planner (aktivitas, log 4 status, energi, rescheduling first-class).
+
+---
+Task ID: Hotfix-1 (insiden login gagal)
+Agent: main (Z.ai Code)
+Task: Diagnosa "Gagal masuk. Coba lagi." pada login mitra@ruangtumbuh.app (laporan user + screenshot).
+
+Work Log:
+- Baca dev.log: query Profile by email SUKSES, password verifikasi LOLOS, crash di auth.ts getSecret() — `SESSION_SECRET belum dikonfigurasi di .env` → POST /api/auth/login 500 → frontend menampilkan error generik.
+- Inspeksi .env: hanya berisi DATABASE_URL. Variabel SESSION_SECRET + SEED_* hilang (diduga .env ter-reset saat restore environment; file DB tetap utuh).
+- Verifikasi DB via script: kedua profil ada (ihsan=owner, mitra=partner), keduanya cocok dengan password `Tumbuh-2026-Dua`; workspace "Ruang Tumbuh" utuh.
+- Pulihkan .env: SESSION_SECRET (openssl rand -base64 32) + SEED_OWNER/PARTNER EMAIL/PASSWORD (kredensial tidak pernah ditulis di source code).
+- Restart server: temuan lingkungan — sandbox membunuh SEMUA proses latar yang di-spawn dari sesi tool dalam 1-2 detik setelah perintah selesai (setsid/nohup tidak membantu, cgroup read-only). Dev server asli hanya berjalan karena di-spawn boot script /start.sh (kini zombie, tanpa respawn). Tidak ada mekanisme respawn (tanpa atd/crond/systemd; supervisor python /app/main.py tidak bereaksi terhadap perubahan file).
+- Verifikasi lengkap DALAM SATU sesi (9/9 lolos): login salah→401 generik; login mitra→200+cookie rt_session; /api/session→konteks workspace+role partner; tanpa cookie→401; login ihsan→200+role owner; GET /→render "Ruang Tumbuh"; logout→200 lalu sesi 401.
+
+Stage Summary:
+- Akar masalah: .env kehilangan SESSION_SECRET (bukan password salah). SUDAH DIPERBAIKI dan terverifikasi end-to-end via API.
+- .env kembali lengkap (DATABASE_URL, SESSION_SECRET, SEED_*). Kredensial kedua akun: password sama-sama `Tumbuh-2026-Dua`.
+- Keterbatasan lingkungan terkonfirmasi: hanya boot script yang dapat menjalankan dev server persisten. Setelah environment di-refresh/restart, `next dev` akan hidup lagi memakai .env yang sudah diperbaiki → login langsung berhasil.
