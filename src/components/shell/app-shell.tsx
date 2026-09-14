@@ -13,8 +13,11 @@ import {
 } from "lucide-react";
 import type { SectionId, SessionContext } from "@/lib/types";
 import { TodaySection } from "@/components/sections/today-section";
-import { ComingSection } from "@/components/sections/coming-section";
 import { SettingsView } from "@/components/settings/settings-view";
+import { PlannerSection } from "@/components/sections/planner-section";
+import { FinanceSection } from "@/components/sections/finance-section";
+import { ReflectionSection } from "@/components/sections/reflection-section";
+import { ChatSection } from "@/components/sections/chat-section";
 import { OfflineBanner, InstallPromptCard } from "@/components/pwa/pwa-client";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -191,65 +194,10 @@ export function AppShell({ session }: { session: SessionContext }) {
           className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-5 sm:pt-8 space-y-6 pb-[calc(4.6rem+env(safe-area-inset-bottom))] lg:pb-10 lg:space-y-0 lg:py-8"
         >
           {active === "today" && <TodaySection />}
-          {active === "planner" && (
-            <ComingSection
-              phase="Fase 2"
-              title="Perencana mingguan"
-              icon={CalendarDays}
-              description="Rencana minggu yang bergerak dengan kenyataan — bukan daftar tugas yang menghakimi."
-              points={[
-                "Navigasi minggu: mundur, maju, kembali ke minggu ini",
-                "Aktivitas per hari dengan jam & durasi preferensi",
-                "Aktivitas fleksibel (tanpa hari tetap) tetap tercatat",
-                "Geser aktivitas ke hari lain — riwayat perpindahan dipertahankan",
-              ]}
-              note="Jadwal cuma panduan, bukan aturan kaku — boleh geser, yang penting tetap dicatat."
-            />
-          )}
-          {active === "finance" && (
-            <ComingSection
-              phase="Fase 3"
-              title="Buku Kas bersama"
-              icon={Wallet}
-              description="Sistem keuangan utuh dari Buku Kas, kini dipakai berdua dalam satu workspace."
-              points={[
-                "Transaksi masuk/keluar: cari, saring, sunting",
-                "Arus kas bulanan & komposisi pengeluaran",
-                "Anggaran bulanan dengan lensa 50/30/20 sebagai panduan",
-                "Alokasi otomatis pemasukan 10/20/10/20/40 — terpisah dari lensa",
-                "Dana target dengan progres akumulasi",
-              ]}
-              note="Angka memberi konteks, bukan vonis. Semua transaksi tercatat siapa yang menambahkan."
-            />
-          )}
-          {active === "reflection" && (
-            <ComingSection
-              phase="Fase 4"
-              title="Refleksi mingguan bersama"
-              icon={NotebookPen}
-              description="Refleksi yang tadinya pribadi, kini jadi percakapan mingguan berdua."
-              points={[
-                "Lima pertanyaan refleksi untuk setiap orang",
-                "Refleksi masing-masing tampil berdampingan per minggu",
-                "Komentar: masukan, saran, semangat — bukan media sosial",
-              ]}
-              note="Sekali menulis pun tetap data. Tidak ada yang dihakimi di ruang ini."
-            />
-          )}
-          {active === "chat" && (
-            <ComingSection
-              phase="Fase 5"
-              title="Pesan pribadi"
-              icon={MessagesSquare}
-              description="Obrolan ringan khusus berdua — realtime, sederhana, tanpa keributan."
-              points={[
-                "Kirim & terima pesan secara realtime",
-                "Penanda pengirim dan waktu",
-                "Tanpa stiker, reaksi, atau grup — cukup dua orang",
-              ]}
-              note="Ruang bicara seadanya, untuk koordinasi kecil dan hal-hal yang tak butuh spreadsheet."
-            />
-          )}
+          {active === "planner" && <PlannerSection />}
+          {active === "finance" && <FinanceSection />}
+          {active === "reflection" && <ReflectionSection />}
+          {active === "chat" && <ChatSection />}
           {active === "settings" && <SettingsView session={session} />}
 
           {/* PWA: status koneksi + ajakan memasang yang halus, tanpa interupsi */}

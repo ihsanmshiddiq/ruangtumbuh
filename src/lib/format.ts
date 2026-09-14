@@ -1,4 +1,12 @@
 // Helper format kecil bersama.
+
+/** Format integer rupiah: 1250000 → "Rp1.250.000" (tanpa desimal). */
+export function rupiah(n: number | null | undefined): string {
+  const v = typeof n === "number" && Number.isFinite(n) ? Math.round(n) : 0;
+  const sign = v < 0 ? "-" : "";
+  return `${sign}Rp${Math.abs(v).toLocaleString("id-ID")}`;
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";

@@ -1,60 +1,192 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { CalendarDays, Sunrise, Sparkles } from "lucide-react";
-import { tanggalIndo } from "@/lib/format";
+// TODAY — halaman utama yang menjawab: "Hari ini saya perlu melakukan apa?"
+// Di atas lipungan: tanggal, energi, agenda hari ini. Tanpa dashboard statistik.
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { Sunrise, Sparkles, CalendarDays, CloudOff } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { OccurrenceCard } from "@/components/planner/occurrence-card";
+import { RescheduleDrawer } from "@/components/planner/reschedule-drawer";
+import { SectionHeader, EmptyState, Panel, TinySpinner } from "@/components/shared/ui-bits";
+import { useApi, apiFetch } from "@/lib/client";
+import { goToSection } from "@/lib/section-store";
+import { tanggalIndo, toISODate } from "@/lib/dates";
+import { cn } from "@/lib/utils";
+import type { WeekView, OccurrenceDTO } from "@/server/planner";
 
 const noopSubscribe = () => () => {};
+const getClientDate = () => tanggalIndo(toISODate(new Date()));
 const getServerDate = () => null;
-// Stabil selama satu hari penuh (string sama), aman dari render loop.
-const getClientDate = () => tanggalIndo(new Date());
 
 export function TodaySection() {
-  // Tanggal mengikuti perangkat pengguna (bukan zona waktu server).
-  // Server snapshot null → "…" singkat, lalu diganti tanpa peringatan hidrasi.
-  const hariIni = useSyncExternalStore(noopSubscribe, getClientDate, getServerDate);
+  const { toast } = useToast();
+  const today = toISODate(new Date());
+  // Tanggal perangkat tanpa mismatch hidrasi (pola Fase 1).
+  const hariLabel = useSyncExternalStore(noopSubscribe, getClientDate, getServerDate);
+
+  const { data, error, loading, refetch } = useApi<WeekView>(`/api/planner/week?start=${today}`);
+
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [resched, setResched] = useState<OccurrenceDTO | null>(null);
+
+  const hariIni = useMemo(
+    () => (data?.occurrences ?? []).filter((o) => o.date === today),
+    [data, today]
+  );
+  const energyToday = data?.energy.find((e) => e.date === today)?.level ?? null;
+
+  async function setStatus(occ: OccurrenceDTO, status: "done" | "skipped" | "planned") {
+    setBusyId(occ.id);
+    try {
+      await apiFetch("/api/occurrences", {
+        method: "PATCH",
+        body: JSON.stringify({ id: occ.id, status }),
+      });
+      toast({
+        title:
+          status === "done" ? `Ditandai selesai: ${occ.activityName}` :
+          status === "skipped" ? `${occ.activityName} dilewati — tidak apa-apa.` :
+          `${occ.activityName} kembali direncanakan`,
+      });
+      await refetch();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menyimpan. Coba lagi." });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleReschedule(target: { date: string; plannedStartTime: string | null }): Promise<boolean> {
+    if (!resched) return false;
+    try {
+      await apiFetch(`/api/occurrences/${resched.id}/reschedule`, {
+        method: "POST",
+        body: JSON.stringify(target),
+      });
+      toast({ title: "Jadwal dipindahkan" });
+      await refetch();
+      return true;
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Pindah jadwal gagal." });
+      return false;
+    }
+  }
+
+  async function setEnergy(level: number) {
+    try {
+      await apiFetch("/api/energy", {
+        method: "PUT",
+        body: JSON.stringify({ date: today, level }),
+      });
+      await refetch();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menyimpan energi." });
+    }
+  }
 
   return (
     <section aria-label="Hari ini" className="space-y-6">
+      <SectionHeader
+        kicker="hari ini"
+        title={hariLabel ?? "…"}
+        action={
+          <Button variant="outline" size="sm" className="h-9" onClick={() => goToSection("planner")}>
+            <CalendarDays className="w-4 h-4" aria-hidden="true" />
+            Buka perencana
+          </Button>
+        }
+      />
+
+      {error && (
+        <Panel className="border-destructive/40">
+          <p className="text-[0.86rem] text-destructive flex items-center gap-2">
+            <CloudOff className="w-4 h-4" aria-hidden="true" />
+            {error}
+          </p>
+        </Panel>
+      )}
+
+      {/* Energi — konteks, bukan nilai */}
+      <Panel>
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-4 h-4 text-rt-lilac" aria-hidden="true" />
+          <p className="rt-kicker">energi hari ini</p>
+        </div>
+        <div className="flex items-center gap-2" role="group" aria-label="Set level energi hari ini">
+          {[
+            { level: 1, label: "rendah" },
+            { level: 2, label: "sedang" },
+            { level: 3, label: "tinggi" },
+          ].map(({ level, label }) => (
+            <button
+              key={level}
+              type="button"
+              onClick={() => setEnergy(level)}
+              aria-pressed={energyToday === level}
+              className={cn(
+                "flex-1 min-h-11 rounded-xl border px-3 py-2 text-[0.8rem] font-medium transition-colors",
+                energyToday === level
+                  ? "border-rt-violet/50 bg-rt-violet/15 text-foreground"
+                  : "border-border text-muted-foreground active:bg-white/[0.04]"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="rt-fine mt-2">
+          Sekadar catatan konteks — bukan penilaian. Dipakai untuk membaca pola mingguan.
+        </p>
+      </Panel>
+
+      {/* Agenda hari ini */}
       <div>
-        <p className="rt-kicker flex items-center gap-2">
-          <Sunrise className="w-3.5 h-3.5 text-rt-teal/80" aria-hidden="true" />
-          hari ini
-        </p>
-        <h2 className="font-[family-name:var(--font-fraunces)] text-[1.35rem] xs:text-2xl sm:text-3xl font-semibold tracking-[-0.02em] mt-2 leading-[1.15]">
-          {hariIni ?? <span className="text-muted-foreground">…</span>}
-        </h2>
-        <p className="font-[family-name:var(--font-fraunces)] italic text-muted-foreground mt-2 text-[0.92rem]">
-          Halaman utama setelah masuk — ringkasan hari ini, energi, dan aktivitas yang
-          direncanakan.
-        </p>
+        <div className="flex items-center gap-2 mb-3">
+          <Sunrise className="w-4 h-4 text-rt-teal/80" aria-hidden="true" />
+          <p className="rt-kicker">agenda hari ini</p>
+          {loading && <TinySpinner />}
+        </div>
+
+        {hariIni.length === 0 ? (
+          <EmptyState
+            icon={Sunrise}
+            title={loading ? "Memuat agenda…" : "Belum ada rencana untuk hari ini."}
+            hint={
+              loading ? undefined :
+              "Aktivitas dengan hari preferensi hari ini akan muncul di sini. Bisa juga tambah kejadian lewat perencana."
+            }
+            action={
+              !loading && (
+                <Button variant="outline" size="sm" className="h-9" onClick={() => goToSection("planner")}>
+                  Lihat perencana minggu ini
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <div className="space-y-2.5">
+            {hariIni.map((occ) => (
+              <OccurrenceCard
+                key={occ.id}
+                occ={occ}
+                busy={busyId === occ.id}
+                onDone={() => setStatus(occ, "done")}
+                onSkip={() => setStatus(occ, "skipped")}
+                onReschedule={() => setResched(occ)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="rounded-2xl border border-border bg-white/[0.018] p-5 sm:p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-4 h-4 text-rt-lilac" aria-hidden="true" />
-          <p className="rt-kicker">fase 2 · hadir selanjutnya</p>
-        </div>
-        <div className="space-y-3 text-[0.86rem] text-[#d8dce4]">
-          <p className="leading-relaxed">
-            Di fase berikutnya, halaman ini akan menampilkan aktivitas yang direncanakan
-            untuk hari ini — lengkap dengan jam, estimasi durasi, status
-            <span className="font-[family-name:var(--font-plex-mono)] text-[0.72rem] text-rt-lilac"> planned / done / skipped / rescheduled</span>,
-            dan catatan singkat. Tidak ada sekadar &ldquo;selesai / belum&rdquo;.
-          </p>
-          <p className="leading-relaxed">
-            Level energi harian (rendah · sedang · tinggi) juga akan dicatat di sini,
-            dipakai sebagai konteks untuk memahami pola mingguan — bukan sebagai nilai.
-          </p>
-        </div>
-        <div className="mt-5 pt-4 border-t border-border/60">
-          <p className="rt-fine flex items-start gap-2">
-            <CalendarDays className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
-            Fondasi akses &amp; workspace sudah aktif. Setiap orang hanya melihat data
-            workspace-nya sendiri — diverifikasi di server, bukan di browser.
-          </p>
-        </div>
-      </div>
+      <RescheduleDrawer
+        occ={resched}
+        weekStart={data?.weekStart ?? today}
+        open={resched !== null}
+        onOpenChange={(v) => !v && setResched(null)}
+        onConfirm={handleReschedule}
+      />
     </section>
   );
 }

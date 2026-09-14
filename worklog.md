@@ -140,3 +140,21 @@ Stage Summary:
 - Keamanan tak berubah: SW tidak pernah cache /api/*, tanpa registrasi publik, bypass pratinjau Fase 1 tetap seperti semula, RLS-ekuivalen server-side utuh.
 - Sengaja ditunda ke Fase 3+ (belum dibangun): Today/Planner/Finance/Reflection/Chat fungsional — masih placeholder Fase 1; draft-lokal teks offline kompleks (cukup banner jujur); sinkronisasi offline penuh (tidak diminta).
 - Catatan lingkungan: shell tooling sandbox menyuntik DATABASE_URL lama (path Linux) yang menimpa .env — dev server dari terminal user sudah benar; build standalone cp gagal di Windows (pre-existing, skrip package.json).
+
+---
+Task ID: Tahap-0 (git hygiene + rotasi rahasia) & Fase-3 (bangun inti + poles)
+Agent: Buffy (Freebuff)
+Task: Bersihkan git sebelum push remote GitHub, rotasi rahasia yang sempat masuk riwayat, lalu bangun fitur inti (Today/Planner/Finance/Reflection/Chat) dengan standar UX Fase 3 (feedback, loading, empty, error).
+
+Work Log:
+- GIT: core.filemode false (100+ "modified" palsu akibat Linux→Windows); .env & db/custom.db dikeluarkan dari tracking (riwayat lama 2 commit memuat SESSION_SECRET + password lama); .gitignore + db/, *.db, tool-results/; .env.example ditambahkan; REMOTE github.com/ihsanmshiddiq/ruangtumbuh di-push (repo privat). Rotasi: SESSION_SECRET baru + password baru kedua akun (hash scrypt diperbarui, nilai hanya di .env) — verifikasi login ihsan/tantri 200, salah 401, session owner 200.
+- DATA LAYER (src/server/*, semua ber-scope workspaceId = ekuivalen RLS): planner.ts (aktivitas preferensi, kejadian 4 status di ActivityLog + jam rencana di WeeklyPlanEntry sesuai skema, reschedule satu kejadian TANPA menyentuh preferensi, ensureWeekPlanned idempoten, energi 1–3); finance.ts (transaksi CRUD, kategori nonaktif- bukan hapus saat dipakai, ringkasan bulanan, alokasi 10/20/10/20/40 TERPISAH dari lensa 50/30/20, target + setor); reflection.ts (5 field refleksi per user/minggu, komentar, weekly review agregat + insight berbasis data); chat.ts (pesan + polling ?after=ISO).
+- API 16 route di src/app/api/* lewat handle() — error bisnis → 400 manusiawi, 401 → pesan sesi, error teknis tidak pernah bocor.
+- UI: today-section (tanggal, energi 3 tombol, agenda + aksi Selesai/Lewati/Pindah, drawer reschedule); planner-section (navigasi minggu, pemilih hari 7 kolom, aktivitas fleksibel, drawer aktivitas baru); finance-section (ringkasan 3 angka, drawer transaksi urutan jenis→nominal→kategori→tanggal→catatan dengan keyboard angka, kartu transaksi, filter+cari, panel alokasi & lensa dengan penjelasan terpisah, target + setor); reflection-section (data minggu dulu → refleksi 5 pertanyaan → refleksi pasangan → komentar berdua); chat-section (gelembung per pengirim, polling 3s, auto-scroll, input menempel safe-area). ui-bits.tsx: StatusBadge berlabel teks, EmptyState, Panel.
+- Lib: dates.ts (minggu Senin, durasi manusiawi "1 jam 15 mnt", "sekitar 19:15"), client.ts (apiFetch + useApi), section-store.ts (diekstrak dari app-shell), format.ts + rupiah().
+- Verifikasi: tsc bersih, eslint bersih, smoke test API 25/25 (termasuk reschedule kejadian done ditolak, alokasi ≠100 ditolak, nominal ≤0 ditolak, preferensi tak berubah setelah reschedule), data uji [SMOKE] dibersihkan, next build sukses (16 route).
+
+Stage Summary:
+- Fitur inti HIDUP: Today menjawab "hari ini ngapain aja", Planner dengan reschedule natural (preferensi ≠ kejadian), Buku Kas lengkap (transaksi/kategori/alokasi/target), Refleksi berdua + komentar, Chat polling.
+- Weekly review + insight tersedia di payload refleksi; tampilan lanjutan + perbandingan mingguan menunggu arah fase berikutnya.
+- Keamanan tetap: tanpa registrasi publik, semua query ber-scope workspace, data uji dibersihkan.
