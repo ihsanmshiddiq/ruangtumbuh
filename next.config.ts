@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // Indikator dev (tombol melayang "N") menutupi item navigasi bawah paling
+  // kiri di mobile — dimatikan agar preview tidak terhalang.
+  devIndicators: false,
 };
 
 export default nextConfig;

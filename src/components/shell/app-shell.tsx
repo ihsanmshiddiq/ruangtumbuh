@@ -84,6 +84,7 @@ export function AppShell({ session }: { session: SessionContext }) {
 
   const user = session.user;
   const roleLabel = session.workspace.role === "owner" ? "pemilik" : "pasangan";
+  const isPreview = session.authMode === "bypass";
 
   return (
     <div className="min-h-screen flex w-full">
@@ -129,16 +130,27 @@ export function AppShell({ session }: { session: SessionContext }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[0.84rem] font-semibold truncate">{user.displayName}</p>
-              <p className="text-[0.68rem] text-muted-foreground">{roleLabel}</p>
+              <p className="text-[0.68rem] text-muted-foreground">
+                {isPreview ? "mode pratinjau" : roleLabel}
+              </p>
             </div>
-            <button
-              onClick={handleLogout}
-              title="Keluar"
-              aria-label="Keluar"
-              className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            {isPreview ? (
+              <span
+                title="Mode pratinjau — login diaktifkan kembali di fase akhir"
+                className="rt-kicker text-[0.55rem] border border-rt-violet/30 bg-rt-violet/10 text-rt-lilac rounded-md px-2 py-1.5 shrink-0"
+              >
+                pratinjau
+              </span>
+            ) : (
+              <button
+                onClick={handleLogout}
+                title="Keluar"
+                aria-label="Keluar"
+                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </aside>

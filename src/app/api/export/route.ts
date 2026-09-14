@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getMembershipContext } from "@/lib/auth";
 
+// Membaca cookie sesi — wajib dinamis, jangan pernah di-cache.
+export const dynamic = "force-dynamic";
+
 /**
  * Ekspor data workspace yang bisa diakses pengguna ini (portabilitas data,
  * filosofi dari kedua aplikasi asli). Fase 1: profil + workspace + anggota.

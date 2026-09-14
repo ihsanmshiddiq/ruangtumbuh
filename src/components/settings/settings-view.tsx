@@ -219,22 +219,40 @@ export function SettingsView({ session }: { session: SessionContext }) {
       {/* ── Akun ───────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-white/[0.018] p-5 sm:p-6">
         <h3 className="font-semibold text-[0.95rem] mb-3">Akun</h3>
-        <p className="text-[0.86rem] text-muted-foreground mb-4">
-          Sesi disimpan aman di cookie HttpOnly dan berlaku 30 hari.
-        </p>
-        <Button
-          variant="outline"
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="h-9 text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60"
-        >
-          {loggingOut ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
-          )}
-          Keluar
-        </Button>
+        {session.authMode === "bypass" ? (
+          <>
+            <p className="text-[0.86rem] text-muted-foreground mb-4">
+              Mode pratinjau aktif — gerbang masuk dinonaktifkan sementara selama
+              pengembangan, dan aplikasi dibuka sebagai anggota pertama workspace.
+              Layar masuk email + kata sandi akan diaktifkan kembali di fase akhir,
+              lengkap dengan sesi cookie HttpOnly yang berlaku 30 hari.
+            </p>
+            <p className="rt-fine flex items-start gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+              Fitur login tidak dihapus — hanya ditunda. Semua data tetap terikat
+              pada workspace dan anggotanya di server.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-[0.86rem] text-muted-foreground mb-4">
+              Sesi disimpan aman di cookie HttpOnly dan berlaku 30 hari.
+            </p>
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="h-9 text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60"
+            >
+              {loggingOut ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+              Keluar
+            </Button>
+          </>
+        )}
       </div>
     </section>
   );

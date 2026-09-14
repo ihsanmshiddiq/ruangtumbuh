@@ -97,3 +97,23 @@ Stage Summary:
 - Akar masalah: .env kehilangan SESSION_SECRET (bukan password salah). SUDAH DIPERBAIKI dan terverifikasi end-to-end via API.
 - .env kembali lengkap (DATABASE_URL, SESSION_SECRET, SEED_*). Kredensial kedua akun: password sama-sama `Tumbuh-2026-Dua`.
 - Keterbatasan lingkungan terkonfirmasi: hanya boot script yang dapat menjalankan dev server persisten. Setelah environment di-refresh/restart, `next dev` akan hidup lagi memakai .env yang sudah diperbaiki → login langsung berhasil.
+
+---
+Task ID: 6-a (Mode Pratinjau — login ditunda)
+Agent: main (Z.ai Code)
+Task: Permintaan user — jangan tampilkan halaman login dulu; preview aplikasi langsung; login diaktifkan kembali di akhir pengembangan.
+
+Work Log:
+- Diagnosis tambahan: environment restart me-RESET .env (hanya tersisa DATABASE_URL) sementara db/custom.db tetap persisten → login gagal lagi (SESSION_SECRET hilang). Pelajaran: secret/flag lintas-restart tidak boleh hanya di .env.
+- src/lib/auth.ts: (1) AUTH_BYPASS (konstan true; env AUTH_BYPASS=0 memaksa mati) — getMembershipContext tanpa cookie valid mengembalikan konteks anggota pertama workspace (pemilik) dengan authMode "bypass"; sesi cookie valid tetap menang. (2) getSecret berlapis: env → tabel AppConfig (dibuat via $executeRawUnsafe, di luar schema.prisma agar mirror Supabase tetap 1:1) → generate & simpan permanen; secret kini TAHAN reset .env.
+- src/lib/types.ts: SessionContext + authMode ("session" | "bypass").
+- app-shell.tsx: badge "PRATINJAU" menggantikan tombol keluar + label "mode pratinjau" saat bypass; handleLogout tetap untuk mode sesi.
+- settings-view.tsx: bagian Akun menampilkan penjelasan mode pratinjau (login ditunda, tidak dihapus) dan menyembunyikan tombol Keluar saat bypass.
+- session/profile/export route: + `export const dynamic = "force-dynamic"` — route GET pembaca cookie sebelumnya ter-serve cache stale (bukti: /api/export hasil baru, /api/session 401 lama) → kini selalu dinamis.
+- next.config.ts: devIndicators: false — tombol devtools melayang "N" menutupi tab navigasi bawah paling kiri di mobile (terbukti saat uji klik).
+- Verifikasi agent-browser: GET / langsung AppShell (bukan login); 6 bagian render; edit nama tersimpan (PATCH via bypass) lalu dikembalikan ke "Ihsan"; ekspor OK; Pengaturan→Akun menampilkan mode pratinjau; mobile 390px: bottom nav bersih tanpa overlay, footer menempel; konsol tanpa error. curl: /api/session tanpa cookie = 200 authMode bypass; login regresi benar=200/salah=401; lint bersih.
+
+Stage Summary:
+- LOGIN DITUNDA, TIDAK DIHAPUS: aktifkan kembali dengan `AUTH_BYPASS = false` di src/lib/auth.ts (atau env AUTH_BYPASS=0) + tampilkan LoginScreen kembali — layar login, rate limit, dan alur cookie tetap utuh.
+- Secret sesi sekarang bertahan di DB (AppConfig) → login siap dipakai kapan pun tanpa risiko .env ter-reset.
+- UI berbahasa Indonesia menyatakan status mode pratinjau secara jujur (badge + penjelasan di Pengaturan).

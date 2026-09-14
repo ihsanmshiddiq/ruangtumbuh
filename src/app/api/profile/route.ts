@@ -3,6 +3,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getMembershipContext } from "@/lib/auth";
 
+// Membaca cookie sesi — wajib dinamis.
+export const dynamic = "force-dynamic";
+
 const patchSchema = z.object({
   displayName: z.string().trim().min(1, "Nama tampilan wajib diisi.").max(40, "Maksimal 40 karakter."),
 });
