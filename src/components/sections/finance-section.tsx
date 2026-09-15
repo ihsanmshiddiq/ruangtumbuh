@@ -44,6 +44,7 @@ export function FinanceSection() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
   const [showTools, setShowTools] = useState(false);
+  const [showAllocTools, setShowAllocTools] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -238,15 +239,24 @@ export function FinanceSection() {
       </div>
 
       {/* Alokasi pemasukan — SISTEM TERPISAH dari lensa 50/30/20 */}
-      {data && data.allocation.income > 0 && (
+      {data && (data.allocation.income > 0 || showAllocTools) && (
         <Panel>
           <div className="flex items-center gap-2 mb-1">
             <PlusCircle className="w-4 h-4 text-rt-teal" aria-hidden="true" />
             <p className="rt-kicker">alokasi otomatis pemasukan</p>
+            <button
+              type="button"
+              onClick={() => setShowAllocTools((v) => !v)}
+              aria-expanded={showAllocTools}
+              className="rt-kicker text-[0.55rem] text-rt-lilac ml-auto min-h-9 px-2"
+            >
+              {showAllocTools ? "tutup" : "atur"}
+            </button>
           </div>
           <p className="rt-fine mb-4">
             Setiap pemasukan dibagi menurut rencana kalian — sistem ini berbeda dari lensa
             pengeluaran 50/30/20 di bawah.
+            {data.allocation.income === 0 && " Belum ada pemasukan bulan ini — rencana tetap bisa diatur sekarang."}
           </p>
           <div className="space-y-2">
             {data.allocation.items.map((it) => (
@@ -264,6 +274,7 @@ export function FinanceSection() {
               </div>
             ))}
           </div>
+          {showAllocTools && <AllocationEditor plan={data.allocation.plan} onSaved={refetch} />}
         </Panel>
       )}
 
@@ -572,5 +583,82 @@ function TargetManager({ onSaved }: { onSaved: () => Promise<void> }) {
       </div>
       {error && <p role="alert" className="text-sm text-destructive mt-2">{error}</p>}
     </Panel>
+  );
+}
+
+/* ── Editor alokasi pemasukan — persentase editable, wajib total 100% ── */
+
+const ALLOC_FIELDS: { key: keyof AllocPlan; label: string }[] = [
+  { key: "needsPercent", label: "Kebutuhan" },
+  { key: "wantsPercent", label: "Keinginan" },
+  { key: "charityPercent", label: "Sedekah" },
+  { key: "savingsPercent", label: "Tabungan" },
+  { key: "targetPercent", label: "Dana target" },
+];
+
+type AllocPlan = {
+  needsPercent: number; wantsPercent: number; charityPercent: number;
+  savingsPercent: number; targetPercent: number;
+};
+
+function AllocationEditor({ plan, onSaved }: { plan: AllocPlan; onSaved: () => Promise<void> }) {
+  const { toast } = useToast();
+  const [vals, setVals] = useState<AllocPlan>(plan);
+  const [saving, setSaving] = useState(false);
+  const total = ALLOC_FIELDS.reduce((s, f) => s + (Number(vals[f.key]) || 0), 0);
+  const dirty = ALLOC_FIELDS.some((f) => (Number(vals[f.key]) || 0) !== plan[f.key]);
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border/60">
+      <p className="rt-kicker mb-3">atur pembagian pemasukan</p>
+      <div className="space-y-2">
+        {ALLOC_FIELDS.map((f) => (
+          <div key={f.key} className="flex items-center gap-3">
+            <Label htmlFor={`alloc-${f.key}`} className="w-24 sm:w-28 text-[0.8rem] text-muted-foreground shrink-0">
+              {f.label}
+            </Label>
+            <Input
+              id={`alloc-${f.key}`}
+              value={String(vals[f.key] ?? "")}
+              onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
+              inputMode="numeric"
+              className="h-11 w-20 text-center font-[family-name:var(--font-plex-mono)]"
+              aria-label={`Persentase ${f.label}`}
+            />
+            <span className="text-[0.8rem] text-muted-foreground">%</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between mt-3">
+        <p className={cn("rt-fine font-[family-name:var(--font-plex-mono)]", total === 100 ? "text-rt-good" : "text-destructive")}>
+          total {total}% {total === 100 ? "✓" : "— harus tepat 100%"}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" className="h-10" disabled={!dirty || saving} onClick={() => setVals(plan)}>
+            Batal
+          </Button>
+          <Button
+            className="h-10"
+            disabled={saving || !dirty || total !== 100}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await apiFetch("/api/allocation", { method: "PUT", body: JSON.stringify(vals) });
+                toast({ title: "Alokasi diperbarui" });
+                await onSaved();
+              } catch (e) {
+                toast({ title: e instanceof Error ? e.message : "Gagal menyimpan alokasi." });
+              } finally { setSaving(false); }
+            }}
+          >
+            {saving && <TinySpinner />}
+            Simpan
+          </Button>
+        </div>
+      </div>
+      <p className="rt-fine mt-2">
+        Perubahan berlaku untuk pembagian pemasukan berikutnya — transaksi yang sudah tercatat tidak diubah.
+      </p>
+    </div>
   );
 }
