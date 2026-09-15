@@ -1,6 +1,6 @@
 // Tipe bersama client/server — tanpa import server apa pun.
 export type SessionContext = {
-  authMode: "session" | "bypass"; // bypass = mode pratinjau tanpa login (sementara)
+  authMode: "supabase" | "bypass"; // bypass = mode pratinjau lokal tanpa login (tidak pernah di produksi)
   user: { id: string; email: string; displayName: string };
   workspace: {
     id: string;

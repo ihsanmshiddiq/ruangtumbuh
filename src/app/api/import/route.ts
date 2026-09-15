@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
 import { getMembershipContext } from "@/lib/auth";
+import { getSupabaseFor, unwrap } from "@/server/db";
 
 // Impor backup — operasi sensitif, jangan pernah di-cache.
 export const dynamic = "force-dynamic";
@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
  * - Tidak ada delete; duplikat (kategori bernama sama, aktivitas bernama sama,
  *   refleksi (orang, minggu) sama) dilewati dengan aman.
  * - Identitas penulis = pemilik yang sedang login (session), bukan dari file.
+ *   RLS menegakkan hal yang sama di database (insert user_id = auth.uid()).
  * - Nominal & persentase divalidasi ulang; data aneh ditolak, bukan dikarang.
  */
 
@@ -183,7 +184,6 @@ export async function POST(req: NextRequest) {
     );
   }
   const backup: Backup = parsed.data;
-  const wsId = ctx.workspace.id;
 
   if (body.mode === "preview") {
     const counts = {
@@ -220,54 +220,70 @@ export async function POST(req: NextRequest) {
   // ── RESTORE — hanya insert; identitas penulis = sesi login ──
   try {
     const me = ctx.user.id;
+    const wsId = ctx.workspace.id;
+    const sb = await getSupabaseFor(ctx);
 
     // Kategori: map nama → id (pakai yang ada, buat yang belum ada).
-    const existingCats = await db.transactionCategory.findMany({ where: { workspaceId: wsId } });
-    const catByName = new Map(existingCats.map((c) => [c.name.toLowerCase(), c.id]));
+    const catByName = new Map<string, string>();
+    const existingCats = (unwrap(
+      await sb.from("transaction_categories").select("id, name").eq("workspace_id", wsId)
+    ) ?? []) as unknown as { id: string; name: string }[];
+    for (const c of existingCats) catByName.set(c.name.toLowerCase(), c.id);
     for (const c of backup.workspace.finance.categories) {
       const key = c.name.toLowerCase();
       if (!catByName.has(key)) {
-        const created = await db.transactionCategory.create({
-          data: {
-            workspaceId: wsId,
-            name: c.name,
-            type: c.type,
-            bucket: c.bucket,
-            monthlyTarget: c.monthlyTarget,
-            active: c.active,
-          },
-        });
+        const created = unwrap(
+          await sb
+            .from("transaction_categories")
+            .insert({
+              workspace_id: wsId,
+              name: c.name,
+              type: c.type,
+              bucket: c.bucket,
+              monthly_target: c.monthlyTarget,
+              active: c.active,
+            })
+            .select("id")
+            .single()
+        ) as { id: string };
         catByName.set(key, created.id);
       }
     }
 
     // Aktivitas: map nama → id (pakai yang ada, buat yang belum ada).
-    const existingActs = await db.activity.findMany({ where: { workspaceId: wsId } });
-    const actByName = new Map(existingActs.map((a) => [a.name.toLowerCase(), a.id]));
+    const actByName = new Map<string, string>();
+    const existingActs = (unwrap(
+      await sb.from("activities").select("id, name").eq("workspace_id", wsId)
+    ) ?? []) as unknown as { id: string; name: string }[];
+    for (const a of existingActs) actByName.set(a.name.toLowerCase(), a.id);
     for (const a of backup.workspace.activities) {
       const key = a.name.toLowerCase();
       if (!actByName.has(key)) {
-        const created = await db.activity.create({
-          data: {
-            workspaceId: wsId,
-            createdBy: me,
-            name: a.name,
-            description: a.description,
-            weeklyTarget: a.weeklyTarget,
-            estimatedDurationMinutes: a.estimatedDurationMinutes,
-            preferredStartTime: a.preferredStartTime,
-            preferredEndTime: a.preferredEndTime,
-            preferredDays: JSON.stringify(a.preferredDays),
-            active: a.active,
-          },
-        });
+        const created = unwrap(
+          await sb
+            .from("activities")
+            .insert({
+              workspace_id: wsId,
+              created_by: me,
+              name: a.name,
+              description: a.description,
+              weekly_target: a.weeklyTarget,
+              estimated_duration_minutes: a.estimatedDurationMinutes,
+              preferred_start_time: a.preferredStartTime,
+              preferred_end_time: a.preferredEndTime,
+              preferred_days: a.preferredDays,
+              active: a.active,
+            })
+            .select("id")
+            .single()
+        ) as { id: string };
         actByName.set(key, created.id);
       }
     }
 
     // Log aktivitas: upsert per (aktivitas, orang, tanggal) — duplikat aman.
-    // Catatan: pemulihan bersifat "milik pemilik" untuk baris log (upsert butuh
-    // satu pemilik baris); di aplikasi dua-orang ini wajar untuk restore.
+    // Pemulihan bersifat "milik pemilik" untuk baris log; RLS menegakkan
+    // user_id = auth.uid() pada insert — sesuai karena kita memakai `me`.
     let skippedLogs = 0;
     for (const l of backup.workspace.activityLogs) {
       const activityId = actByName.get(l.activity.toLowerCase());
@@ -275,134 +291,136 @@ export async function POST(req: NextRequest) {
         skippedLogs++;
         continue;
       }
-      try {
-        await db.activityLog.upsert({
-          where: { activityId_userId_date: { activityId, userId: me, date: l.date } },
-          create: {
-            workspaceId: wsId,
-            activityId,
-            userId: me,
-            date: l.date,
-            status: l.status,
-            plannedDurationMinutes: l.plannedDurationMinutes,
-            actualDurationMinutes: l.actualDurationMinutes,
-            note: l.note,
-            rescheduledFrom: l.rescheduledFrom,
-          },
-          update: {},
-        });
-      } catch {
-        skippedLogs++;
-      }
+      const res = await sb.from("activity_logs").upsert(
+        {
+          workspace_id: wsId,
+          activity_id: activityId,
+          user_id: me,
+          date: l.date,
+          status: l.status,
+          planned_duration_minutes: l.plannedDurationMinutes,
+          actual_duration_minutes: l.actualDurationMinutes,
+          note: l.note,
+          rescheduled_from: l.rescheduledFrom,
+        },
+        { onConflict: "activity_id,user_id,date", ignoreDuplicates: true }
+      );
+      if (res.error) skippedLogs++;
     }
 
-    // Energi: upsert per (orang, tanggal).
+    // Energi: upsert per (orang, tanggal) — yang sudah ada tidak ditimpa.
     for (const e of backup.workspace.energyLogs) {
-      await db.energyLog.upsert({
-        where: { userId_date: { userId: me, date: e.date } },
-        create: { workspaceId: wsId, userId: me, date: e.date, level: e.level },
-        update: {},
-      });
+      await sb.from("energy_logs").upsert(
+        { workspace_id: wsId, user_id: me, date: e.date, level: e.level },
+        { onConflict: "user_id,date", ignoreDuplicates: true }
+      );
     }
 
-    // Refleksi: upsert per (orang, minggu) — hanya isi field yang masih kosong.
+    // Refleksi: upsert per (orang, minggu) — hanya mengisi bila belum ada.
     for (const r of backup.workspace.reflections) {
-      await db.weeklyReflection.upsert({
-        where: { userId_weekStart: { userId: me, weekStart: r.weekStart } },
-        create: {
-          workspaceId: wsId,
-          userId: me,
-          weekStart: r.weekStart,
+      await sb.from("weekly_reflections").upsert(
+        {
+          workspace_id: wsId,
+          user_id: me,
+          week_start: r.weekStart,
           worked: r.worked,
           blocked: r.blocked,
-          nextAdjustment: r.nextAdjustment,
-          weeklySentence: r.weeklySentence,
+          next_adjustment: r.nextAdjustment,
+          weekly_sentence: r.weeklySentence,
           gratitude: r.gratitude,
         },
-        update: {},
-      });
+        { onConflict: "user_id,week_start", ignoreDuplicates: true }
+      );
     }
 
-    // Transaksi: duplikat persis (tanggal+jumlah+kategori) dilewati.
+    // Transaksi: duplikat persis (tanggal+jumlah+kategori+jenis) dilewati.
     let skippedTx = 0;
+    const existingTx = (unwrap(
+      await sb
+        .from("transactions")
+        .select("date, amount, category_id, type")
+        .eq("workspace_id", wsId)
+    ) ?? []) as unknown as { date: string; amount: number; category_id: string; type: string }[];
+    const txSeen = new Set(existingTx.map((t) => `${t.date}|${t.amount}|${t.category_id}|${t.type}`));
     for (const t of backup.workspace.finance.transactions) {
       const categoryId = catByName.get(t.category.toLowerCase());
       if (!categoryId) {
         skippedTx++;
         continue;
       }
-      const dup = await db.transaction.findFirst({
-        where: { workspaceId: wsId, date: t.date, amount: t.amount, categoryId, type: t.type },
-      });
-      if (dup) {
+      const key = `${t.date}|${t.amount}|${categoryId}|${t.type}`;
+      if (txSeen.has(key)) {
         skippedTx++;
         continue;
       }
-      await db.transaction.create({
-        data: {
-          workspaceId: wsId,
-          createdBy: me,
-          date: t.date,
-          type: t.type,
-          categoryId,
-          amount: t.amount,
-          note: t.note,
-        },
+      txSeen.add(key);
+      const res = await sb.from("transactions").insert({
+        workspace_id: wsId,
+        created_by: me,
+        date: t.date,
+        type: t.type,
+        category_id: categoryId,
+        amount: t.amount,
+        note: t.note,
       });
+      if (res.error) skippedTx++;
     }
 
-    // Dana target: duplikat nama dilewati (perbandingan tanpa kapital —
-    // mode "insensitive" hanya ada di Postgres, sandbox memakai SQLite).
+    // Dana target: duplikat nama dilewati (perbandingan tanpa kapital).
     let skippedTargets = 0;
-    const existingTargets = await db.financialTarget.findMany({ where: { workspaceId: wsId } });
+    const existingTargets = (unwrap(
+      await sb.from("financial_targets").select("name").eq("workspace_id", wsId)
+    ) ?? []) as unknown as { name: string }[];
     const targetNamesLower = new Set(existingTargets.map((t) => t.name.toLowerCase()));
     for (const t of backup.workspace.finance.targets) {
       if (targetNamesLower.has(t.name.toLowerCase())) {
         skippedTargets++;
         continue;
       }
-      await db.financialTarget.create({
-        data: {
-          workspaceId: wsId,
-          name: t.name,
-          targetAmount: t.targetAmount,
-          currentAmount: t.currentAmount,
-          active: t.active,
-        },
+      const res = await sb.from("financial_targets").insert({
+        workspace_id: wsId,
+        name: t.name,
+        target_amount: t.targetAmount,
+        current_amount: t.currentAmount,
+        active: t.active,
       });
+      if (res.error) skippedTargets++;
     }
 
     // Notes: restore jadi milik si pemilik sesi, visibilitas dipertahankan.
     // Catatan identik (judul + isi) miliknya yang sudah ada dilewati.
     let skippedNotes = 0;
+    const existingNotes = (unwrap(
+      await sb
+        .from("notes")
+        .select("title, content")
+        .eq("workspace_id", wsId)
+        .eq("author_id", me)
+    ) ?? []) as unknown as { title: string; content: string }[];
+    const noteSeen = new Set(existingNotes.map((n) => `${n.title}|${n.content}`));
     for (const n of backup.workspace.notes) {
-      const dup = await db.note.findFirst({
-        where: {
-          workspaceId: wsId,
-          authorId: me,
-          title: n.title,
-          content: n.content,
-        },
-      });
-      if (dup) {
+      const key = `${n.title}|${n.content}`;
+      if (noteSeen.has(key)) {
         skippedNotes++;
         continue;
       }
-      await db.note.create({
-        data: {
-          workspaceId: wsId,
-          authorId: me,
-          title: n.title,
-          content: n.content,
-          visibility: n.visibility,
-        },
+      noteSeen.add(key);
+      const res = await sb.from("notes").insert({
+        workspace_id: wsId,
+        author_id: me,
+        title: n.title,
+        content: n.content,
+        visibility: n.visibility,
       });
+      if (res.error) skippedNotes++;
     }
 
     // Alokasi: restore HANYA jika workspace belum punya pos sama sekali —
     // restore tidak pernah menimpa rencana yang sudah ada.
-    const existingAlloc = await db.allocationItem.count({ where: { workspaceId: wsId } });
-    if (existingAlloc === 0) {
+    const existingAlloc = (unwrap(
+      await sb.from("allocation_items").select("id").eq("workspace_id", wsId).limit(1)
+    ) ?? []) as unknown as { id: string }[];
+    if (existingAlloc.length === 0) {
       const plan = backup.workspace.allocationPlan;
       const items =
         backup.workspace.allocationItems.length > 0
@@ -418,14 +436,14 @@ export async function POST(req: NextRequest) {
             : [];
       const total = items.reduce((s, i) => s + i.percent, 0);
       if (items.length > 0 && total === 100) {
-        await db.allocationItem.createMany({
-          data: items.map((it, i) => ({
-            workspaceId: wsId,
+        await sb.from("allocation_items").insert(
+          items.map((it, i) => ({
+            workspace_id: wsId,
             label: it.label,
             percent: it.percent,
             position: i,
-          })),
-        });
+          }))
+        );
       }
     }
 

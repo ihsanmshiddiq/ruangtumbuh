@@ -40,6 +40,22 @@ Lihat [supabase/SETUP.md](supabase/SETUP.md). Ringkas:
 3. Jalankan backfill workspace (pola ada di schema; jangan commit UUID/nilai aslimu)
 4. Set env di Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (hanya credential yang aman untuk client)
 
+### Deploy ke Vercel
+
+```bash
+bunx vercel          # link project
+bunx vercel --prod   # deploy produksi
+```
+
+Environment variables yang wajib diset di Vercel (Project → Settings → Environment Variables):
+
+| Nama | Nilai | Catatan |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://xxxx.supabase.co` | aman untuk client |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_...` | aman untuk client |
+
+Jangan set `SUPABASE_SERVICE_ROLE_KEY` atau `AUTH_BYPASS` di Vercel — keduanya hanya untuk mode pratinjau lokal. Dengan RLS aktif, server mengakses data memakai sesi pengguna yang login; database yang menegakkan batas workspace.
+
 ## Keamanan — prinsip
 
 > *Source code boleh diketahui publik. Data pribadi dan akses pengguna tidak boleh.*

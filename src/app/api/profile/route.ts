@@ -1,16 +1,16 @@
+// Profile update milik sendiri — setara policy RLS: UPDATE profiles WHERE id = auth.uid().
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
 import { getMembershipContext } from "@/lib/auth";
+import { getSupabaseFor, unwrap } from "@/server/db";
 
-// Membaca cookie sesi — wajib dinamis.
+// Membaca sesi — wajib dinamis.
 export const dynamic = "force-dynamic";
 
 const patchSchema = z.object({
   displayName: z.string().trim().min(1, "Nama tampilan wajib diisi.").max(40, "Maksimal 40 karakter."),
 });
 
-// Update profil sendiri — setara policy RLS: UPDATE profiles WHERE id = auth.uid().
 export async function PATCH(request: NextRequest) {
   const ctx = await getMembershipContext();
   if (!ctx) {
@@ -32,11 +32,15 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const updated = await db.profile.update({
-    where: { id: ctx.user.id },
-    data: { displayName: parsed.data.displayName },
-    select: { id: true, displayName: true },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const updated = unwrap(
+    await sb
+      .from("profiles")
+      .update({ display_name: parsed.data.displayName })
+      .eq("id", ctx.user.id)
+      .select("id, display_name")
+      .single()
+  ) as { id: string; display_name: string };
 
-  return NextResponse.json({ ok: true, profile: updated });
+  return NextResponse.json({ ok: true, profile: { id: updated.id, displayName: updated.display_name } });
 }

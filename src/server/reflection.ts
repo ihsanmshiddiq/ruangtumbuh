@@ -1,10 +1,10 @@
 // Data layer server-only: refleksi mingguan + komentar + weekly review.
-// SEMUA query difilter workspaceId — ekuivalen RLS.
-import { db } from "@/lib/db";
+// Semua query lewat klien pengguna — RLS Supabase menegakkan batas workspace.
 import type { SessionContext } from "@/lib/types";
 import { weekDates, addDays } from "@/lib/dates";
 import { rupiah } from "@/lib/format";
 import { getWeek } from "@/server/planner";
+import { getSupabaseFor, unwrap } from "@/server/db";
 
 type Ctx = SessionContext;
 
@@ -27,36 +27,53 @@ export type CommentDTO = {
 
 const FIELDS = ["worked", "blocked", "nextAdjustment", "weeklySentence", "gratitude"] as const;
 
-export async function getReflection(ctx: Ctx, weekStart: string, userId: string): Promise<ReflectionDTO | null> {
-  const row = await db.weeklyReflection.findUnique({
-    where: { userId_weekStart: { userId, weekStart } },
-  });
-  if (!row) return null;
-  const name = ctx.workspace.members.find((m) => m.id === row.userId)?.displayName ?? "Anggota";
+const REFLECT_SELECT =
+  "id, user_id, week_start, worked, blocked, next_adjustment, weekly_sentence, gratitude, updated_at";
+
+type ReflectRow = {
+  id: string; user_id: string; week_start: string;
+  worked: string; blocked: string; next_adjustment: string;
+  weekly_sentence: string; gratitude: string; updated_at: string;
+};
+
+function reflectDTO(r: ReflectRow, name: string): ReflectionDTO {
   return {
-    id: row.id, userId: row.userId, userName: name, weekStart: row.weekStart,
-    worked: row.worked, blocked: row.blocked, nextAdjustment: row.nextAdjustment,
-    weeklySentence: row.weeklySentence, gratitude: row.gratitude,
-    updatedAt: row.updatedAt.toISOString(),
+    id: r.id, userId: r.user_id, userName: name, weekStart: r.week_start,
+    worked: r.worked, blocked: r.blocked, nextAdjustment: r.next_adjustment,
+    weeklySentence: r.weekly_sentence, gratitude: r.gratitude,
+    updatedAt: new Date(r.updated_at).toISOString(),
   };
+}
+
+export async function getReflection(ctx: Ctx, weekStart: string, userId: string): Promise<ReflectionDTO | null> {
+  const sb = await getSupabaseFor(ctx);
+  const row = unwrap(
+    await sb
+      .from("weekly_reflections")
+      .select(REFLECT_SELECT)
+      .eq("user_id", userId)
+      .eq("week_start", weekStart)
+      .maybeSingle()
+  ) as unknown as ReflectRow | null;
+  if (!row) return null;
+  const name = ctx.workspace.members.find((m) => m.id === row.user_id)?.displayName ?? "Anggota";
+  return reflectDTO(row, name);
 }
 
 /** Kedua refleksi (Ihsan & Tantri) untuk satu minggu — tampil berdampingan. */
 export async function getWeekReflections(ctx: Ctx, weekStart: string): Promise<ReflectionDTO[]> {
-  const rows = await db.weeklyReflection.findMany({
-    where: { workspaceId: ctx.workspace.id, weekStart },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const rows = (unwrap(
+    await sb
+      .from("weekly_reflections")
+      .select(REFLECT_SELECT)
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("week_start", weekStart)
+  ) ?? []) as unknown as ReflectRow[];
   const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
   const order = ctx.workspace.members.map((m) => m.id);
   return rows
-    .map((r) => ({
-      id: r.id, userId: r.userId,
-      userName: nameById.get(r.userId) ?? "Anggota",
-      weekStart: r.weekStart,
-      worked: r.worked, blocked: r.blocked, nextAdjustment: r.nextAdjustment,
-      weeklySentence: r.weeklySentence, gratitude: r.gratitude,
-      updatedAt: r.updatedAt.toISOString(),
-    }))
+    .map((r) => reflectDTO(r, nameById.get(r.user_id) ?? "Anggota"))
     .sort((a, b) => order.indexOf(a.userId) - order.indexOf(b.userId));
 }
 
@@ -69,42 +86,62 @@ export async function upsertReflection(
   for (const f of FIELDS) {
     if (input[f] !== undefined) data[f] = input[f].slice(0, 4000);
   }
-  const row = await db.weeklyReflection.upsert({
-    where: { userId_weekStart: { userId: ctx.user.id, weekStart } },
-    create: { workspaceId: ctx.workspace.id, userId: ctx.user.id, weekStart, ...data },
-    update: data,
-  });
-  const name = ctx.user.displayName;
-  return {
-    id: row.id, userId: row.userId, userName: name, weekStart: row.weekStart,
-    worked: row.worked, blocked: row.blocked, nextAdjustment: row.nextAdjustment,
-    weeklySentence: row.weeklySentence, gratitude: row.gratitude,
-    updatedAt: row.updatedAt.toISOString(),
-  };
+  const sb = await getSupabaseFor(ctx);
+  // Upsert manual: update baris milik sendiri, insert bila belum ada.
+  // (RLS update butuh user_id = auth.uid(); insert menegakkan hal yang sama.)
+  const updated = (unwrap(
+    await sb
+      .from("weekly_reflections")
+      .update(data)
+      .eq("user_id", ctx.user.id)
+      .eq("week_start", weekStart)
+      .select(REFLECT_SELECT)
+  ) ?? []) as unknown as ReflectRow[];
+
+  if (updated.length > 0) return reflectDTO(updated[0], ctx.user.displayName);
+
+  const inserted = unwrap(
+    await sb
+      .from("weekly_reflections")
+      .insert({
+        workspace_id: ctx.workspace.id,
+        user_id: ctx.user.id,
+        week_start: weekStart,
+        ...data,
+      })
+      .select(REFLECT_SELECT)
+      .single()
+  ) as unknown as ReflectRow;
+  return reflectDTO(inserted, ctx.user.displayName);
 }
 
 /* ── Komentar (pada refleksi) ────────────────────────────────────────── */
 
 export async function listComments(ctx: Ctx, weekStart: string): Promise<CommentDTO[]> {
-  const reflections = await db.weeklyReflection.findMany({
-    where: { workspaceId: ctx.workspace.id, weekStart },
-    select: { id: true },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const reflections = (unwrap(
+    await sb
+      .from("weekly_reflections")
+      .select("id")
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("week_start", weekStart)
+  ) ?? []) as unknown as { id: string }[];
   if (reflections.length === 0) return [];
-  const rows = await db.comment.findMany({
-    where: {
-      workspaceId: ctx.workspace.id,
-      entityType: "weekly_reflection",
-      entityId: { in: reflections.map((r) => r.id) },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const rows = (unwrap(
+    await sb
+      .from("comments")
+      .select("id, user_id, content, created_at")
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("entity_type", "weekly_reflection")
+      .in("entity_id", reflections.map((r) => r.id))
+      .order("created_at", { ascending: true })
+  ) ?? []) as unknown as { id: string; user_id: string; content: string; created_at: string }[];
   const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
   return rows.map((c) => ({
-    id: c.id, userId: c.userId,
-    userName: nameById.get(c.userId) ?? "Anggota",
+    id: c.id, userId: c.user_id,
+    userName: nameById.get(c.user_id) ?? "Anggota",
     content: c.content,
-    createdAt: c.createdAt.toISOString(),
+    createdAt: new Date(c.created_at).toISOString(),
   }));
 }
 
@@ -113,19 +150,34 @@ export async function addComment(
   weekStart: string,
   content: string
 ): Promise<CommentDTO> {
-  const target = await db.weeklyReflection.findFirst({
-    where: { workspaceId: ctx.workspace.id, weekStart, userId: { not: ctx.user.id } },
-  });
-  const row = await db.comment.create({
-    data: {
-      workspaceId: ctx.workspace.id,
-      userId: ctx.user.id,
-      entityType: "weekly_reflection",
-      entityId: target?.id ?? `week:${weekStart}`,
-      content: content.slice(0, 1000),
-    },
-  });
-  return { id: row.id, userId: row.userId, userName: ctx.user.displayName, content: row.content, createdAt: row.createdAt.toISOString() };
+  const sb = await getSupabaseFor(ctx);
+  const target = unwrap(
+    await sb
+      .from("weekly_reflections")
+      .select("id")
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("week_start", weekStart)
+      .neq("user_id", ctx.user.id)
+      .limit(1)
+      .maybeSingle()
+  ) as { id: string } | null;
+  const row = unwrap(
+    await sb
+      .from("comments")
+      .insert({
+        workspace_id: ctx.workspace.id,
+        user_id: ctx.user.id, // dari sesi — RLS menegakkan juga
+        entity_type: "weekly_reflection",
+        entity_id: target?.id ?? `week:${weekStart}`,
+        content: content.slice(0, 1000),
+      })
+      .select("id, user_id, content, created_at")
+      .single()
+  ) as unknown as { id: string; user_id: string; content: string; created_at: string };
+  return {
+    id: row.id, userId: row.user_id, userName: ctx.user.displayName,
+    content: row.content, createdAt: new Date(row.created_at).toISOString(),
+  };
 }
 
 /* ── Weekly review — agregat berbasis data, tanpa vonis ──────────────── */
@@ -260,10 +312,15 @@ export async function getFinanceTwoWeeks(ctx: Ctx, weekStart: string): Promise<F
   const prevDates = weekDates(addDays(weekStart, -7));
   const from = prevDates[0];
   const to = dates[6];
-  const rows = await db.transaction.findMany({
-    where: { workspaceId: ctx.workspace.id, date: { gte: from, lte: to } },
-    select: { date: true, type: true, amount: true },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const rows = (unwrap(
+    await sb
+      .from("transactions")
+      .select("date, type, amount")
+      .eq("workspace_id", ctx.workspace.id)
+      .gte("date", from)
+      .lte("date", to)
+  ) ?? []) as unknown as { date: string; type: string; amount: number }[];
   const curFrom = dates[0];
   const sum = (list: typeof rows): WeekFinance => {
     let income = 0, expense = 0;

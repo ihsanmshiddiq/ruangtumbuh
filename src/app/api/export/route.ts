@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { getMembershipContext } from "@/lib/auth";
+import { getSupabaseFor, iso, unwrap } from "@/server/db";
 
-// Membaca cookie sesi — wajib dinamis, jangan pernah di-cache.
+// Backup on-demand — wajib dinamis, jangan pernah di-cache.
 export const dynamic = "force-dynamic";
 
 /**
  * BACKUP LENGKAP (Fase 5): satu file JSON berisi seluruh data workspace yang
- * bisa diakses pemanggil — profil, workspace, aktivitas, log, rencana, energi,
+ * bisa diakses pemanggil — workspace, aktivitas, log, rencana, energi,
  * refleksi, komentar, chat, dan seluruh Buku Kas. Tanpa credential apa pun.
  * File ini privat: dibuat on-demand, diunduh langsung oleh pengguna, tidak
  * pernah dikirim ke layanan pihak ketiga.
@@ -18,9 +18,10 @@ export async function GET() {
     return NextResponse.json({ error: "Tidak diizinkan." }, { status: 401 });
   }
   const wsId = ctx.workspace.id;
+  const sb = await getSupabaseFor(ctx);
 
   const [
-    workspace,
+    wsRes,
     allocationItems,
     activities,
     activityLogs,
@@ -34,41 +35,43 @@ export async function GET() {
     financialTargets,
     notes,
   ] = await Promise.all([
-    db.workspace.findUnique({
-      where: { id: wsId },
-      include: {
-        members: {
-          select: { role: true, createdAt: true, user: { select: { displayName: true } } },
-          orderBy: { createdAt: "asc" as const },
-        },
-      },
-    }),
-    db.allocationItem.findMany({
-      where: { workspaceId: wsId },
-      orderBy: [{ position: "asc" as const }, { createdAt: "asc" as const }],
-    }),
-    db.activity.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
-    db.activityLog.findMany({ where: { workspaceId: wsId }, orderBy: [{ date: "asc" }] }),
-    db.weeklyPlanEntry.findMany({ where: { workspaceId: wsId }, orderBy: [{ date: "asc" }] }),
-    db.energyLog.findMany({ where: { workspaceId: wsId }, orderBy: [{ date: "asc" }] }),
-    db.weeklyReflection.findMany({ where: { workspaceId: wsId }, orderBy: [{ weekStart: "asc" }] }),
-    db.comment.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
-    db.message.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
-    db.transactionCategory.findMany({ where: { workspaceId: wsId }, orderBy: { name: "asc" } }),
-    db.transaction.findMany({ where: { workspaceId: wsId }, orderBy: [{ date: "asc" }] }),
-    db.financialTarget.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
+    sb.from("workspaces").select("name").eq("id", wsId).maybeSingle(),
+    sb.from("allocation_items").select("label, percent").eq("workspace_id", wsId).order("position").order("created_at"),
+    sb.from("activities").select("*").eq("workspace_id", wsId).order("created_at"),
+    sb.from("activity_logs").select("*").eq("workspace_id", wsId).order("date"),
+    sb.from("weekly_plan_entries").select("*").eq("workspace_id", wsId).order("date"),
+    sb.from("energy_logs").select("*").eq("workspace_id", wsId).order("date"),
+    sb.from("weekly_reflections").select("*").eq("workspace_id", wsId).order("week_start"),
+    sb.from("comments").select("*").eq("workspace_id", wsId).order("created_at"),
+    sb.from("messages").select("*").eq("workspace_id", wsId).order("created_at"),
+    sb.from("transaction_categories").select("*").eq("workspace_id", wsId).order("name"),
+    sb.from("transactions").select("*").eq("workspace_id", wsId).order("date"),
+    sb.from("financial_targets").select("*").eq("workspace_id", wsId).order("created_at"),
     // Notes: hanya yang BOLEH dibaca pengguna ini (miliknya + shared) —
     // note private partner tidak pernah keluar dari database lewat backup.
-    db.note.findMany({
-      where: { workspaceId: wsId, OR: [{ authorId: ctx.user.id }, { visibility: "shared" }] },
-      orderBy: { updatedAt: "asc" },
-    }),
+    sb.from("notes").select("*").eq("workspace_id", wsId).or(`author_id.eq.${ctx.user.id},visibility.eq.shared`).order("updated_at"),
   ]);
+
+  const w = (r: { data: unknown; error: { message: string } | null }) => (unwrap(r) ?? []) as unknown as Record<string, never>[];
+  const acts = w(activities);
+  const logs = w(activityLogs);
+  const plans = w(weeklyPlanEntries);
+  const energies = w(energyLogs);
+  const refls = w(reflections);
+  const cmts = w(comments);
+  const msgs = w(messages);
+  const cats = w(categories);
+  const txs = w(transactions);
+  const targets = w(financialTargets);
+  const noteRows = w(notes);
+  const allocs = w(allocationItems);
+  const wsName = (unwrap(wsRes) as { name: string } | null)?.name ?? ctx.workspace.name;
 
   // Nama tampilan saja yang diekspor — email anggota lain tidak ikut.
   const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
-  const person = (userId: string) => nameById.get(userId) ?? null;
-  const catNameById = new Map(categories.map((c) => [c.id, c.name]));
+  const person = (userId: unknown) => nameById.get(String(userId)) ?? null;
+  const catNameById = new Map(cats.map((c) => [c.id, c.name]));
+  const actNameById = new Map(acts.map((a) => [a.id, a.name]));
 
   const payload = {
     app: "ruang-tumbuh",
@@ -76,101 +79,98 @@ export async function GET() {
     exportedAt: new Date().toISOString(),
     exportedBy: ctx.user.displayName,
     workspace: {
-      name: workspace?.name ?? ctx.workspace.name,
-      members: (workspace?.members ?? []).map((m) => ({
-        displayName: m.user.displayName,
+      name: wsName,
+      members: ctx.workspace.members.map((m) => ({
+        displayName: m.displayName,
         role: m.role,
-        joinedAt: m.createdAt,
+        joinedAt: null,
       })),
-      allocationItems: allocationItems.map((a) => ({
-        label: a.label,
-        percent: a.percent,
-      })),
-      activities: activities.map((a) => ({
+      allocationItems: allocs.map((a) => ({ label: a.label, percent: a.percent })),
+      activities: acts.map((a) => ({
         name: a.name,
         description: a.description,
-        weeklyTarget: a.weeklyTarget,
-        estimatedDurationMinutes: a.estimatedDurationMinutes,
-        preferredStartTime: a.preferredStartTime,
-        preferredEndTime: a.preferredEndTime,
-        preferredDays: JSON.parse(a.preferredDays || "[]"),
+        weeklyTarget: a.weekly_target,
+        estimatedDurationMinutes: a.estimated_duration_minutes,
+        preferredStartTime: a.preferred_start_time,
+        preferredEndTime: a.preferred_end_time,
+        preferredDays: Array.isArray(a.preferred_days) ? a.preferred_days : [],
         active: a.active,
-        createdBy: person(a.createdBy),
-        createdAt: a.createdAt,
+        createdBy: person(a.created_by),
+        createdAt: a.created_at,
       })),
-      activityLogs: activityLogs.map((l) => ({
-        activity: activities.find((a) => a.id === l.activityId)?.name ?? null,
-        person: person(l.userId),
+      activityLogs: logs.map((l) => ({
+        activity: actNameById.get(l.activity_id) ?? null,
+        person: person(l.user_id),
         date: l.date,
         status: l.status,
-        plannedDurationMinutes: l.plannedDurationMinutes,
-        actualDurationMinutes: l.actualDurationMinutes,
+        plannedDurationMinutes: l.planned_duration_minutes,
+        actualDurationMinutes: l.actual_duration_minutes,
         note: l.note,
-        rescheduledFrom: l.rescheduledFrom,
+        rescheduledFrom: l.rescheduled_from,
       })),
-      weeklyPlanEntries: weeklyPlanEntries.map((p) => ({
-        activity: activities.find((a) => a.id === p.activityId)?.name ?? null,
-        person: person(p.userId),
+      weeklyPlanEntries: plans.map((p) => ({
+        activity: actNameById.get(p.activity_id) ?? null,
+        person: person(p.user_id),
         date: p.date,
-        plannedStartTime: p.plannedStartTime,
-        plannedEndTime: p.plannedEndTime,
+        plannedStartTime: p.planned_start_time,
+        plannedEndTime: p.planned_end_time,
         status: p.status,
       })),
-      energyLogs: energyLogs.map((e) => ({
-        person: person(e.userId),
+      energyLogs: energies.map((e) => ({
+        person: person(e.user_id),
         date: e.date,
         level: e.level,
       })),
-      reflections: reflections.map((r) => ({
-        person: person(r.userId),
-        weekStart: r.weekStart,
+      reflections: refls.map((r) => ({
+        person: person(r.user_id),
+        weekStart: r.week_start,
         worked: r.worked,
         blocked: r.blocked,
-        nextAdjustment: r.nextAdjustment,
-        weeklySentence: r.weeklySentence,
+        nextAdjustment: r.next_adjustment,
+        weeklySentence: r.weekly_sentence,
         gratitude: r.gratitude,
       })),
-      comments: comments.map((c) => ({
-        person: person(c.userId),
-        entityType: c.entityType,
+      comments: cmts.map((c) => ({
+        person: person(c.user_id),
+        entityType: c.entity_type,
         content: c.content,
-        createdAt: c.createdAt,
+        createdAt: c.created_at,
       })),
-      messages: messages.map((m) => ({
-        sender: person(m.senderId),
+      messages: msgs.map((m) => ({
+        sender: person(m.sender_id),
         content: m.content,
-        createdAt: m.createdAt,
+        createdAt: m.created_at,
       })),
       finance: {
-        categories: categories.map((c) => ({
+        categories: cats.map((c) => ({
           name: c.name,
           type: c.type,
           bucket: c.bucket,
-          monthlyTarget: c.monthlyTarget,
+          monthlyTarget: c.monthly_target,
           active: c.active,
         })),
-        transactions: transactions.map((t) => ({
+        transactions: txs.map((t) => ({
           date: t.date,
           type: t.type,
-          category: catNameById.get(t.categoryId) ?? null,
+          category: catNameById.get(t.category_id) ?? null,
           amount: t.amount,
           note: t.note,
-          createdBy: person(t.createdBy),
+          createdBy: person(t.created_by),
         })),
-        targets: financialTargets.map((t) => ({
+        targets: targets.map((t) => ({
           name: t.name,
-          targetAmount: t.targetAmount,
-          currentAmount: t.currentAmount,
+          targetAmount: t.target_amount,
+          currentAmount: t.current_amount,
           active: t.active,
         })),
       },
-      notes: notes.map((n) => ({
+      notes: noteRows.map((n) => ({
         title: n.title,
         content: n.content,
         visibility: n.visibility,
-        author: person(n.authorId),
-        createdAt: n.createdAt,
-        updatedAt: n.updatedAt,
+        author: person(n.author_id),
+        createdAt: iso(n.created_at),
+        updatedAt: iso(n.updated_at),
       })),
     },
   };

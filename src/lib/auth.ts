@@ -1,21 +1,20 @@
-// Sesi login server-side (sandbox mirror dari Supabase Auth).
-// Cookie HttpOnly bertanda tangan HMAC-SHA256 — token tidak bisa dipalsukan dari browser.
-// Di produksi (Supabase), file ini digantikan oleh @supabase/ssr auth helpers.
-import { cookies } from "next/headers";
-import { createHmac, timingSafeEqual, randomBytes } from "crypto";
-import { db } from "@/lib/db";
-
-export const SESSION_COOKIE = "rt_session";
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 hari
-
-// ─── Mode pratinjau (lokal saja — OPT-IN eksplisit) ──────────────────────────
-// Default: AMAN — semua request wajib cookie sesi valid.
-// Mode pratinjau hanya aktif bila env AUTH_BYPASS=1 diset di mesin lokal
-// (lihat .env.example). Jangan pernah diset di produksi.
-const AUTH_BYPASS = process.env.AUTH_BYPASS === "1";
+// Sesi login — produksi: Supabase Auth (sumber kebenaran kredensial).
+//
+// Alur identitas (setia pada desain RLS):
+//   auth.getUser() → workspace_members → workspace → data.
+// Kredensial TIDAK pernah disentuh aplikasi: email+password diverifikasi
+// Supabase, aplikasi hanya menerima sesi yang sudah valid. Tidak ada tabel
+// password, tidak ada jalur pendaftaran publik (signup dimatikan di Supabase).
+//
+// Mode pratinjau lokal (AUTH_BYPASS=1 + SUPABASE_SERVICE_ROLE_KEY): identitas
+// anggota pertama workspace dipakai tanpa login agar UI bisa diuji cepat.
+// Query data tetap lewat klien service role dengan filter eksplisit dari
+// konteks ini. Produksi (Vercel): env ini sengaja tidak di-set → default aman.
+import { createServerSupabase, createServiceSupabase, supabaseEnv, type ServiceSupabase } from "@/lib/supabase/server";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 export type SessionContext = {
-  authMode: "session" | "bypass";
+  authMode: "supabase" | "bypass";
   user: { id: string; email: string; displayName: string };
   workspace: {
     id: string;
@@ -25,163 +24,122 @@ export type SessionContext = {
   };
 };
 
-// ─── Secret sesi: env → DB (AppConfig) → generate & simpan ─────────────────
-// .env lingkungan sandbox bisa ter-reset saat environment di-restart, sedangkan
-// file database tetap persisten — karena itu secret dicadangkan di tabel
-// AppConfig (dibuat via raw SQL, di luar schema.prisma agar mirror Supabase
-// tetap 1:1). Env tetap jadi sumber utama kalau ada.
-let cachedSecret: string | null = null;
+type DataClient = { user: SupabaseClient; service: ServiceSupabase | null };
 
-async function ensureAppConfigTable(): Promise<void> {
-  await db.$executeRawUnsafe(
-    `CREATE TABLE IF NOT EXISTS "AppConfig" (
-       "key" TEXT PRIMARY KEY,
-       "value" TEXT NOT NULL,
-       "updatedAt" DATETIME NOT NULL
-     )`
-  );
-}
+type MemberJoin = {
+  user_id: string;
+  role: string;
+  profiles: { display_name: string } | null;
+};
 
-async function getSecret(): Promise<string> {
-  if (cachedSecret) return cachedSecret;
+type MembershipRow = {
+  workspace_id: string;
+  role: string;
+};
 
-  const fromEnv = process.env.SESSION_SECRET;
-  if (fromEnv && fromEnv.length >= 16) {
-    cachedSecret = fromEnv;
-    return cachedSecret;
-  }
-
-  await ensureAppConfigTable();
-  const rows = await db.$queryRawUnsafe<{ value: string }[]>(
-    `SELECT value FROM "AppConfig" WHERE key = 'session_secret' LIMIT 1`
-  );
-  if (rows[0]?.value && rows[0].value.length >= 16) {
-    cachedSecret = rows[0].value;
-    return cachedSecret;
-  }
-
-  // Bootstrap sekali: buat secret acak lalu simpan permanen di DB.
-  const generated = randomBytes(32).toString("base64url");
-  await db.$executeRawUnsafe(
-    `INSERT OR IGNORE INTO "AppConfig" ("key", "value", "updatedAt")
-     VALUES ('session_secret', '${generated}', CURRENT_TIMESTAMP)`
-  );
-  cachedSecret = generated;
-  return cachedSecret;
-}
-
-async function sign(value: string): Promise<string> {
-  const secret = await getSecret();
-  return createHmac("sha256", secret).update(value).digest("base64url");
-}
-
-async function createToken(userId: string): Promise<string> {
-  const payload = Buffer.from(
-    JSON.stringify({ uid: userId, exp: Date.now() + MAX_AGE_SECONDS * 1000 })
-  ).toString("base64url");
-  return `${payload}.${await sign(payload)}`;
-}
-
-async function verifyToken(token: string | undefined): Promise<string | null> {
-  if (!token) return null;
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
-  const expected = Buffer.from(await sign(payload));
-  const actual = Buffer.from(signature);
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
-  try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
-      uid: string;
-      exp: number;
-    };
-    if (!data.uid || typeof data.exp !== "number" || data.exp < Date.now()) return null;
-    return data.uid;
-  } catch {
-    return null;
-  }
-}
-
-/** Verifikasi kredensial + terbitkan cookie sesi. Mengembalikan null bila gagal. */
-export async function login(email: string, password: string): Promise<boolean> {
-  const profile = await db.profile.findUnique({ where: { email } });
-  // Pesan error selalu generik: jangan bocorkan apakah email terdaftar.
-  if (!profile) return false;
-  const { verifyPassword } = await import("@/lib/password");
-  if (!verifyPassword(password, profile.passwordHash)) return false;
-  const store = await cookies();
-  store.set(SESSION_COOKIE, await createToken(profile.id), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: MAX_AGE_SECONDS,
-    path: "/",
-  });
-  return true;
-}
-
-export async function logout(): Promise<void> {
-  const store = await cookies();
-  store.delete(SESSION_COOKIE);
-}
-
-/** Rangkai konteks dari satu userId + keanggotaan workspace-nya. */
+/** Rangkai konteks dari userId + keanggotaan workspace-nya (satu pintu). */
 async function buildContext(
+  client: DataClient,
   userId: string,
-  authMode: "session" | "bypass"
+  email: string,
+  authMode: "supabase" | "bypass"
 ): Promise<SessionContext | null> {
-  const profile = await db.profile.findUnique({ where: { id: userId } });
-  if (!profile) return null;
+  const db = authMode === "bypass" && client.service ? client.service : client.user;
 
-  const membership = await db.workspaceMember.findFirst({
-    where: { userId },
-    include: { workspace: true },
-  });
-  if (!membership) return null;
+  const { data: membership, error: mErr } = await db
+    .from("workspace_members")
+    .select("workspace_id, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (mErr || !membership) return null;
+  const mem = membership as MembershipRow;
 
-  const allMembers = await db.workspaceMember.findMany({
-    where: { workspaceId: membership.workspaceId },
-    include: { user: { select: { id: true, displayName: true } } },
-    orderBy: { createdAt: "asc" },
-  });
+  const [wsRes, membersRes] = await Promise.all([
+    db.from("workspaces").select("id, name").eq("id", mem.workspace_id).maybeSingle(),
+    db
+      .from("workspace_members")
+      .select("user_id, role, profiles ( display_name )")
+      .eq("workspace_id", mem.workspace_id)
+      .order("created_at", { ascending: true }),
+  ]);
+  const members = (membersRes.data ?? []) as unknown as MemberJoin[];
+  if (!wsRes.data || membersRes.error || members.length === 0) return null;
+
+  const mapped = members.map((m) => ({
+    id: m.user_id,
+    displayName: m.profiles?.display_name ?? "Anggota",
+    role: m.role,
+  }));
+  const me = mapped.find((m) => m.id === userId);
 
   return {
     authMode,
-    user: { id: profile.id, email: profile.email, displayName: profile.displayName },
+    user: { id: userId, email, displayName: me?.displayName ?? "Anggota" },
     workspace: {
-      id: membership.workspace.id,
-      name: membership.workspace.name,
-      role: membership.role,
-      // Email anggota lain sengaja tidak diekspos (setia pada model Supabase).
-      members: allMembers.map((m) => ({
-        id: m.user.id,
-        displayName: m.user.displayName,
-        role: m.role,
-      })),
+      id: mem.workspace_id,
+      name: (wsRes.data as { name: string }).name,
+      role: mem.role,
+      members: mapped,
     },
   };
 }
 
-/**
- * Rantau otorisasi setara RLS:
- * auth.uid() → workspace_members → workspace_id → data.
- * Dipanggil di SETIAP API route — frontend tidak pernah dipercaya.
- *
- * Mode pratinjau: tanpa cookie valid, konteks identitas anggota pertama
- * (pemilik) tetap dikembalikan agar aplikasi bisa dipakai tanpa login.
- */
+/** Konteks dari sesi Supabase valid, atau null. Mode pratinjau lokal opsional. */
 export async function getMembershipContext(): Promise<SessionContext | null> {
-  const store = await cookies();
-  const userId = await verifyToken(store.get(SESSION_COOKIE)?.value);
+  if (!supabaseEnv()) return null;
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (userId) return buildContext(userId, "session");
+  if (user) {
+    return buildContext({ user: supabase, service: null }, user.id, user.email ?? "", "supabase");
+  }
 
-  if (AUTH_BYPASS) {
-    const firstMember = await db.workspaceMember.findFirst({
-      orderBy: { createdAt: "asc" },
-      select: { userId: true },
-    });
-    if (firstMember) return buildContext(firstMember.userId, "bypass");
+  // Mode pratinjau lokal — tidak pernah aktif di produksi (env tidak diset).
+  if (process.env.AUTH_BYPASS === "1") {
+    const service = createServiceSupabase();
+    if (service) {
+      const { data: first } = await service
+        .from("workspace_members")
+        .select("user_id")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (first) {
+        const { data: prof } = await service
+          .from("profiles")
+          .select("display_name")
+          .eq("id", (first as { user_id: string }).user_id)
+          .maybeSingle();
+        return buildContext(
+          { user: supabase, service },
+          (first as { user_id: string }).user_id,
+          "preview@lokal",
+          "bypass"
+        );
+      }
+    }
   }
 
   return null;
 }
+
+/**
+ * Verifikasi kredensial lewat Supabase Auth + terbitkan cookie sesi.
+ * Mengembalikan false bila gagal (pesan di route selalu generik).
+ */
+export async function login(email: string, password: string): Promise<boolean> {
+  if (!supabaseEnv()) return false;
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  return !error;
+}
+
+/** Hapus sesi (cookie Supabase dibersihkan oleh signOut). */
+export async function logout(): Promise<void> {
+  const supabase = await createServerSupabase();
+  await supabase.auth.signOut();
+}
+
+export type { User };

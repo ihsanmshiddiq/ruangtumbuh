@@ -1,11 +1,11 @@
 // Data layer server-only: Buku Kas — transaksi, kategori, alokasi, target.
-// SEMUA query difilter workspaceId dari konteks sesi — ekuivalen RLS.
+// Semua query lewat klien pengguna — RLS Supabase menegakkan batas workspace.
 // DUA SISTEM KEUANGAN YANG TERPISAH (tidak pernah dicampur di UI):
 //  1) Lensa 50/30/20  → interpretasi pengeluaran per bucket (dihitung runtime).
-//  2) Alokasi pemasukan 10/20/10/20/40 → pembagian setiap pemasukan (tabel plan).
-import { db } from "@/lib/db";
+//  2) Alokasi pemasukan ber-pos bebas → pembagian setiap pemasukan (tabel items).
 import type { SessionContext } from "@/lib/types";
 import { monthStartOf } from "@/lib/dates";
+import { getSupabaseFor, unwrap } from "@/server/db";
 
 type Ctx = SessionContext;
 
@@ -24,43 +24,96 @@ export type TransactionDTO = {
 const BUCKETS = ["needs", "wants", "charity", "savings", "target"] as const;
 export type Bucket = (typeof BUCKETS)[number];
 
-export async function listCategories(ctx: Ctx): Promise<CategoryDTO[]> {
-  const rows = await db.transactionCategory.findMany({
-    where: { workspaceId: ctx.workspace.id, active: true },
-    orderBy: [{ type: "asc" }, { name: "asc" }],
-  });
-  return rows.map((c) => ({
+type CategoryRow = {
+  id: string; name: string; type: string; bucket: string;
+  monthly_target: number; active: boolean;
+};
+
+type TxRow = {
+  id: string; date: string; type: string; amount: number;
+  category_id: string; note: string; created_by: string;
+  transaction_categories: { name: string; bucket: string } | null;
+};
+
+function catDTO(c: CategoryRow): CategoryDTO {
+  return {
     id: c.id, name: c.name,
     type: c.type as CategoryDTO["type"],
     bucket: c.bucket as CategoryDTO["bucket"],
-    monthlyTarget: c.monthlyTarget, active: c.active,
-  }));
+    monthlyTarget: c.monthly_target, active: c.active,
+  };
+}
+
+function txDTO(r: TxRow, nameById: Map<string, string>): TransactionDTO {
+  return {
+    id: r.id, date: r.date,
+    type: r.type as "income" | "expense",
+    amount: r.amount,
+    categoryId: r.category_id,
+    categoryName: r.transaction_categories?.name ?? "—",
+    bucket: r.transaction_categories?.bucket ?? "needs",
+    note: r.note,
+    createdBy: r.created_by,
+    createdByName: nameById.get(r.created_by) ?? "Anggota",
+  };
+}
+
+const CAT_SELECT = "id, name, type, bucket, monthly_target, active";
+const TX_SELECT =
+  "id, date, type, amount, category_id, note, created_by, transaction_categories ( name, bucket )";
+
+export async function listCategories(ctx: Ctx): Promise<CategoryDTO[]> {
+  const sb = await getSupabaseFor(ctx);
+  const rows = unwrap(
+    await sb
+      .from("transaction_categories")
+      .select(CAT_SELECT)
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("active", true)
+      .order("type", { ascending: true })
+      .order("name", { ascending: true })
+  ) as unknown as CategoryRow[];
+  return rows.map(catDTO);
 }
 
 export async function createCategory(
   ctx: Ctx,
   input: { name: string; type: "income" | "expense"; bucket: CategoryDTO["bucket"]; monthlyTarget?: number }
 ): Promise<CategoryDTO> {
-  const row = await db.transactionCategory.create({
-    data: {
-      workspaceId: ctx.workspace.id,
-      name: input.name,
-      type: input.type,
-      bucket: input.type === "income" ? "income" : input.bucket,
-      monthlyTarget: input.monthlyTarget ?? 0,
-    },
-  });
-  return { id: row.id, name: row.name, type: row.type as CategoryDTO["type"], bucket: row.bucket as CategoryDTO["bucket"], monthlyTarget: row.monthlyTarget, active: row.active };
+  const sb = await getSupabaseFor(ctx);
+  const row = unwrap(
+    await sb
+      .from("transaction_categories")
+      .insert({
+        workspace_id: ctx.workspace.id,
+        name: input.name,
+        type: input.type,
+        bucket: input.type === "income" ? "income" : input.bucket,
+        monthly_target: input.monthlyTarget ?? 0,
+      })
+      .select(CAT_SELECT)
+      .single()
+  ) as unknown as CategoryRow;
+  return catDTO(row);
 }
 
 /** Kategori tidak boleh dihapus kalau masih dipakai transaksi (nonaktifkan saja). */
 export async function deactivateCategory(ctx: Ctx, id: string): Promise<{ ok: boolean; error?: string }> {
-  const used = await db.transaction.findFirst({ where: { categoryId: id, workspaceId: ctx.workspace.id } });
+  const sb = await getSupabaseFor(ctx);
+  const used = unwrap(
+    await sb
+      .from("transactions")
+      .select("id")
+      .eq("category_id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .limit(1)
+      .maybeSingle()
+  );
   if (used) {
-    await db.transactionCategory.update({ where: { id }, data: { active: false } });
+    await sb.from("transaction_categories").update({ active: false }).eq("id", id).eq("workspace_id", ctx.workspace.id);
     return { ok: true, error: "Kategori masih dipakai transaksi — dinonaktifkan, bukan dihapus." };
   }
-  await db.transactionCategory.deleteMany({ where: { id, workspaceId: ctx.workspace.id } });
+  await sb.from("transaction_categories").delete().eq("id", id).eq("workspace_id", ctx.workspace.id);
   return { ok: true };
 }
 
@@ -73,28 +126,48 @@ export type TransactionInput = {
 };
 
 async function assertCategory(ctx: Ctx, id: string, type: "income" | "expense") {
-  const c = await db.transactionCategory.findFirst({
-    where: { id, workspaceId: ctx.workspace.id, active: true },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const c = unwrap(
+    await sb
+      .from("transaction_categories")
+      .select("id, type")
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("active", true)
+      .maybeSingle()
+  ) as { id: string; type: string } | null;
   if (!c) throw new Error("Kategori tidak ditemukan.");
   if (c.type !== type) throw new Error("Jenis kategori tidak cocok dengan jenis transaksi.");
+}
+
+async function nameMap(ctx: Ctx): Promise<Map<string, string>> {
+  const sb = await getSupabaseFor(ctx);
+  const members = unwrap(
+    await sb.from("workspace_members").select("user_id, profiles ( display_name )").eq("workspace_id", ctx.workspace.id)
+  ) as unknown as { user_id: string; profiles: { display_name: string } | null }[];
+  return new Map(members.map((m) => [m.user_id, m.profiles?.display_name ?? "Anggota"]));
 }
 
 export async function createTransaction(ctx: Ctx, input: TransactionInput): Promise<TransactionDTO> {
   if (!Number.isInteger(input.amount) || input.amount <= 0) throw new Error("Nominal harus angka bulat lebih dari 0.");
   await assertCategory(ctx, input.categoryId, input.type);
-  const row = await db.transaction.create({
-    data: {
-      workspaceId: ctx.workspace.id,
-      createdBy: ctx.user.id,
-      date: input.date,
-      type: input.type,
-      categoryId: input.categoryId,
-      amount: input.amount,
-      note: input.note ?? "",
-    },
-  });
-  return (await getTransaction(ctx, row.id))!;
+  const sb = await getSupabaseFor(ctx);
+  const row = unwrap(
+    await sb
+      .from("transactions")
+      .insert({
+        workspace_id: ctx.workspace.id,
+        created_by: ctx.user.id, // dari sesi — RLS menegakkan juga
+        date: input.date,
+        type: input.type,
+        category_id: input.categoryId,
+        amount: input.amount,
+        note: input.note ?? "",
+      })
+      .select(TX_SELECT)
+      .single()
+  ) as unknown as TxRow;
+  return txDTO(row, await nameMap(ctx));
 }
 
 export async function updateTransaction(
@@ -102,59 +175,49 @@ export async function updateTransaction(
   id: string,
   input: Partial<TransactionInput>
 ): Promise<TransactionDTO | null> {
-  const existing = await db.transaction.findFirst({ where: { id, workspaceId: ctx.workspace.id } });
-  if (!existing) return null;
+  const sb = await getSupabaseFor(ctx);
   if (input.categoryId && input.type) await assertCategory(ctx, input.categoryId, input.type);
-  await db.transaction.update({
-    where: { id: existing.id },
-    data: {
-      ...(input.date !== undefined ? { date: input.date } : {}),
-      ...(input.type !== undefined ? { type: input.type } : {}),
-      ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
-      ...(input.amount !== undefined ? { amount: input.amount } : {}),
-      ...(input.note !== undefined ? { note: input.note } : {}),
-    },
-  });
-  return getTransaction(ctx, id);
+  const data: Record<string, unknown> = {};
+  if (input.date !== undefined) data.date = input.date;
+  if (input.type !== undefined) data.type = input.type;
+  if (input.categoryId !== undefined) data.category_id = input.categoryId;
+  if (input.amount !== undefined) data.amount = input.amount;
+  if (input.note !== undefined) data.note = input.note;
+  const rows = unwrap(
+    await sb
+      .from("transactions")
+      .update(data)
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .select(TX_SELECT)
+  ) as unknown as TxRow[];
+  return rows[0] ? txDTO(rows[0], await nameMap(ctx)) : null;
 }
 
 export async function deleteTransaction(ctx: Ctx, id: string): Promise<boolean> {
-  const existing = await db.transaction.findFirst({ where: { id, workspaceId: ctx.workspace.id } });
-  if (!existing) return false;
-  await db.transaction.delete({ where: { id: existing.id } });
-  return true;
+  const sb = await getSupabaseFor(ctx);
+  const rows = unwrap(
+    await sb
+      .from("transactions")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .select("id")
+  ) as { id: string }[];
+  return rows.length > 0;
 }
 
 export async function getTransaction(ctx: Ctx, id: string): Promise<TransactionDTO | null> {
-  const row = await db.transaction.findFirst({
-    where: { id, workspaceId: ctx.workspace.id },
-  });
-  return row ? dtoFromRow(ctx, row) : null;
-}
-
-async function dtoFromRow(ctx: Ctx, row: {
-  id: string; date: string; type: string; amount: number; categoryId: string;
-  note: string; createdBy: string;
-}): Promise<TransactionDTO> {
-  const [cat, members] = await Promise.all([
-    db.transactionCategory.findFirst({ where: { id: row.categoryId } }),
-    db.workspaceMember.findMany({
-      where: { workspaceId: ctx.workspace.id },
-      include: { user: { select: { displayName: true } } },
-    }),
-  ]);
-  const nameById = new Map(members.map((m) => [m.userId, m.user.displayName]));
-  return {
-    id: row.id, date: row.date,
-    type: row.type as "income" | "expense",
-    amount: row.amount,
-    categoryId: row.categoryId,
-    categoryName: cat?.name ?? "—",
-    bucket: cat?.bucket ?? "needs",
-    note: row.note,
-    createdBy: row.createdBy,
-    createdByName: nameById.get(row.createdBy) ?? "Anggota",
-  };
+  const sb = await getSupabaseFor(ctx);
+  const rows = unwrap(
+    await sb
+      .from("transactions")
+      .select(TX_SELECT)
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .limit(1)
+  ) as unknown as TxRow[];
+  return rows[0] ? txDTO(rows[0], await nameMap(ctx)) : null;
 }
 
 export type MonthSummary = {
@@ -167,16 +230,23 @@ export type MonthSummary = {
   txCount: number;
 };
 
-/** Ringkasan bulan: pemasukan, pengeluaran, saldo, komposisi per bucket. */
-export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSummary> {
+function monthRange(month: string): { from: string; to: string } {
   const from = monthStartOf(`${month}-01`);
   const [y, m] = month.split("-").map(Number);
   const lastDay = new Date(y, m, 0).getDate();
   const to = `${month}-${String(lastDay).padStart(2, "0")}`;
-  const rows = await db.transaction.findMany({
-    where: { workspaceId: ctx.workspace.id, date: { gte: from, lte: to } },
-  });
-  const cats = await listCategories(ctx);
+  return { from, to };
+}
+
+/** Ringkasan bulan: pemasukan, pengeluaran, saldo, komposisi per bucket. */
+export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSummary> {
+  const { from, to } = monthRange(month);
+  const sb = await getSupabaseFor(ctx);
+  const [txRows, cats] = await Promise.all([
+    sb.from("transactions").select("date, type, amount, category_id").eq("workspace_id", ctx.workspace.id).gte("date", from).lte("date", to),
+    listCategories(ctx),
+  ]);
+  const rows = (unwrap(txRows) ?? []) as unknown as { date: string; type: string; amount: number; category_id: string }[];
   const catById = new Map(cats.map((c) => [c.id, c]));
 
   let income = 0, expense = 0;
@@ -186,11 +256,11 @@ export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSum
     if (t.type === "income") income += t.amount;
     else {
       expense += t.amount;
-      const c = catById.get(t.categoryId);
+      const c = catById.get(t.category_id);
       if (c && (BUCKETS as readonly string[]).includes(c.bucket)) {
         byBucket[c.bucket as Bucket] += t.amount;
       }
-      catTotals.set(t.categoryId, (catTotals.get(t.categoryId) ?? 0) + t.amount);
+      catTotals.set(t.category_id, (catTotals.get(t.category_id) ?? 0) + t.amount);
     }
   }
   const byCategory = [...catTotals.entries()]
@@ -208,37 +278,46 @@ export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSum
 
 /** Daftar transaksi sebulan (urut tanggal terbaru) — batch, tanpa N+1. */
 export async function listMonthTransactions(ctx: Ctx, month: string): Promise<TransactionDTO[]> {
-  const from = monthStartOf(`${month}-01`);
-  const [y, m] = month.split("-").map(Number);
-  const lastDay = new Date(y, m, 0).getDate();
-  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
+  const { from, to } = monthRange(month);
+  const sb = await getSupabaseFor(ctx);
   const [rows, cats, members] = await Promise.all([
-    db.transaction.findMany({
-      where: { workspaceId: ctx.workspace.id, date: { gte: from, lte: to } },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    }),
-    db.transactionCategory.findMany({ where: { workspaceId: ctx.workspace.id } }),
-    db.workspaceMember.findMany({
-      where: { workspaceId: ctx.workspace.id },
-      include: { user: { select: { displayName: true } } },
-    }),
+    sb
+      .from("transactions")
+      .select(TX_SELECT)
+      .eq("workspace_id", ctx.workspace.id)
+      .gte("date", from)
+      .lte("date", to)
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false }),
+    sb.from("transaction_categories").select(CAT_SELECT).eq("workspace_id", ctx.workspace.id),
+    sb.from("workspace_members").select("user_id, profiles ( display_name )").eq("workspace_id", ctx.workspace.id),
   ]);
-  const catById = new Map(cats.map((c) => [c.id, c]));
-  const nameById = new Map(members.map((mb) => [mb.userId, mb.user.displayName]));
-  return rows.map((r) => ({
-    id: r.id, date: r.date,
-    type: r.type as "income" | "expense",
-    amount: r.amount,
-    categoryId: r.categoryId,
-    categoryName: catById.get(r.categoryId)?.name ?? "—",
-    bucket: catById.get(r.categoryId)?.bucket ?? "needs",
-    note: r.note,
-    createdBy: r.createdBy,
-    createdByName: nameById.get(r.createdBy) ?? "Anggota",
-  }));
+  const txs = (unwrap(rows) ?? []) as unknown as TxRow[];
+  const catById = new Map(
+    ((unwrap(cats) ?? []) as unknown as CategoryRow[]).map((c) => [c.id, c])
+  );
+  const nameById = new Map(
+    ((unwrap(members) ?? []) as unknown as { user_id: string; profiles: { display_name: string } | null }[]).map(
+      (m) => [m.user_id, m.profiles?.display_name ?? "Anggota"]
+    )
+  );
+  return txs.map((r) => {
+    const cat = catById.get(r.category_id);
+    return {
+      id: r.id, date: r.date,
+      type: r.type as "income" | "expense",
+      amount: r.amount,
+      categoryId: r.category_id,
+      categoryName: cat?.name ?? "—",
+      bucket: cat?.bucket ?? "needs",
+      note: r.note,
+      createdBy: r.created_by,
+      createdByName: nameById.get(r.created_by) ?? "Anggota",
+    };
+  });
 }
 
-/* ── Alokasi pemasukan (10/20/10/20/40) — sistem kedua, terpisah ─────── */
+/* ── Alokasi pemasukan (pos bebas) — sistem kedua, terpisah ──────────── */
 
 export type AllocationItemDTO = { id: string; label: string; percent: number };
 
@@ -252,34 +331,45 @@ const DEFAULT_ALLOC: { label: string; percent: number }[] = [
 
 export const ALLOC_LIMITS = { min: 1, max: 12, labelMax: 40 };
 
-/** Daftar pos alokasi workspace; workspace baru otomatis diisi bawaan 10/20/10/20/40. */
+type AllocRow = { id: string; label: string; percent: number };
+
+/** Daftar pos alokasi workspace; workspace baru otomatis diisi bawaan. */
 export async function getAllocationItems(ctx: Ctx): Promise<AllocationItemDTO[]> {
-  let rows = await db.allocationItem.findMany({
-    where: { workspaceId: ctx.workspace.id },
-    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-  });
+  const sb = await getSupabaseFor(ctx);
+  let rows = (unwrap(
+    await sb
+      .from("allocation_items")
+      .select("id, label, percent")
+      .eq("workspace_id", ctx.workspace.id)
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true })
+  ) ?? []) as unknown as AllocRow[];
   if (rows.length === 0) {
-    await db.allocationItem.createMany({
-      data: DEFAULT_ALLOC.map((d, i) => ({
-        workspaceId: ctx.workspace.id, label: d.label, percent: d.percent, position: i,
-      })),
-    });
-    rows = await db.allocationItem.findMany({
-      where: { workspaceId: ctx.workspace.id },
-      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    });
+    await sb.from("allocation_items").insert(
+      DEFAULT_ALLOC.map((d, i) => ({
+        workspace_id: ctx.workspace.id, label: d.label, percent: d.percent, position: i,
+      }))
+    );
+    rows = (unwrap(
+      await sb
+        .from("allocation_items")
+        .select("id, label, percent")
+        .eq("workspace_id", ctx.workspace.id)
+        .order("position", { ascending: true })
+        .order("created_at", { ascending: true })
+    ) ?? []) as unknown as AllocRow[];
   }
-  return rows.map((r) => ({ id: r.id, label: r.label, percent: r.percent }));
+  return rows;
 }
 
 /**
  * Simpan daftar pos alokasi (tambah/hapus/ganti nama/ubah persen).
- * Strategi: ganti semua baris dalam satu transaksi — jumlah pos kecil,
- * id baru dikembalikan ke client. Aturan: total WAJIB 100.
+ * Strategi: hapus semua lalu insert ulang — jumlah pos kecil, operasi cepat.
+ * Aturan: total WAJIB 100.
  */
 export async function updateAllocationItems(
   ctx: Ctx,
-  items: { label: string; percent: number }[],
+  items: { label: string; percent: number }[]
 ): Promise<{ ok: boolean; error?: string }> {
   if (!Array.isArray(items) || items.length < ALLOC_LIMITS.min || items.length > ALLOC_LIMITS.max) {
     return { ok: false, error: `Pos alokasi harus ${ALLOC_LIMITS.min}–${ALLOC_LIMITS.max} baris.` };
@@ -300,17 +390,25 @@ export async function updateAllocationItems(
   }
   if (total !== 100) return { ok: false, error: `Total alokasi harus 100% (sekarang ${total}%).` };
 
-  await db.$transaction(async (tx) => {
-    await tx.allocationItem.deleteMany({ where: { workspaceId: ctx.workspace.id } });
-    await tx.allocationItem.createMany({
-      data: items.map((it, i) => ({
-        workspaceId: ctx.workspace.id,
-        label: it.label.trim(),
-        percent: it.percent,
-        position: i,
-      })),
-    });
-  });
+  const sb = await getSupabaseFor(ctx);
+  await sb.from("allocation_items").delete().eq("workspace_id", ctx.workspace.id);
+  const res = await sb.from("allocation_items").insert(
+    items.map((it, i) => ({
+      workspace_id: ctx.workspace.id,
+      label: it.label.trim(),
+      percent: it.percent,
+      position: i,
+    }))
+  );
+  if (res.error) {
+    // Insert gagal setelah delete — pulihkan bawaan agar workspace tidak kosong.
+    await sb.from("allocation_items").insert(
+      DEFAULT_ALLOC.map((d, i) => ({
+        workspace_id: ctx.workspace.id, label: d.label, percent: d.percent, position: i,
+      }))
+    );
+    throw new Error(res.error.message);
+  }
   return { ok: true };
 }
 
@@ -342,40 +440,64 @@ export type TargetDTO = {
 };
 
 export async function listTargets(ctx: Ctx): Promise<TargetDTO[]> {
-  const rows = await db.financialTarget.findMany({
-    where: { workspaceId: ctx.workspace.id, active: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const rows = (unwrap(
+    await sb
+      .from("financial_targets")
+      .select("id, name, target_amount, current_amount")
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("active", true)
+      .order("created_at", { ascending: true })
+  ) ?? []) as unknown as { id: string; name: string; target_amount: number; current_amount: number }[];
   return rows.map((t) => ({
-    id: t.id, name: t.name, targetAmount: t.targetAmount, currentAmount: t.currentAmount,
-    percent: t.targetAmount > 0 ? Math.min(100, Math.round((t.currentAmount / t.targetAmount) * 100)) : 0,
-    remaining: Math.max(0, t.targetAmount - t.currentAmount),
+    id: t.id, name: t.name, targetAmount: t.target_amount, currentAmount: t.current_amount,
+    percent: t.target_amount > 0 ? Math.min(100, Math.round((t.current_amount / t.target_amount) * 100)) : 0,
+    remaining: Math.max(0, t.target_amount - t.current_amount),
   }));
 }
 
 export async function createTarget(ctx: Ctx, input: { name: string; targetAmount: number }): Promise<TargetDTO> {
   if (!Number.isInteger(input.targetAmount) || input.targetAmount <= 0) throw new Error("Nominal target harus lebih dari 0.");
-  const row = await db.financialTarget.create({
-    data: { workspaceId: ctx.workspace.id, name: input.name, targetAmount: input.targetAmount },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const row = unwrap(
+    await sb
+      .from("financial_targets")
+      .insert({ workspace_id: ctx.workspace.id, name: input.name, target_amount: input.targetAmount })
+      .select("id, name, target_amount, current_amount")
+      .single()
+  ) as unknown as { id: string; name: string; target_amount: number; current_amount: number };
   return {
-    id: row.id, name: row.name, targetAmount: row.targetAmount, currentAmount: row.currentAmount,
-    percent: 0, remaining: row.targetAmount,
+    id: row.id, name: row.name, targetAmount: row.target_amount, currentAmount: row.current_amount,
+    percent: 0, remaining: row.target_amount,
   };
 }
 
 /** Tambah dana ke target (setoran). */
 export async function contributeTarget(ctx: Ctx, id: string, amount: number): Promise<{ ok: boolean; error?: string }> {
   if (!Number.isInteger(amount) || amount <= 0) return { ok: false, error: "Nominal setor harus lebih dari 0." };
-  const t = await db.financialTarget.findFirst({ where: { id, workspaceId: ctx.workspace.id } });
+  const sb = await getSupabaseFor(ctx);
+  const t = unwrap(
+    await sb
+      .from("financial_targets")
+      .select("id, current_amount")
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .maybeSingle()
+  ) as { id: string; current_amount: number } | null;
   if (!t) return { ok: false, error: "Target tidak ditemukan." };
-  await db.financialTarget.update({ where: { id: t.id }, data: { currentAmount: t.currentAmount + amount } });
+  await sb.from("financial_targets").update({ current_amount: t.current_amount + amount }).eq("id", t.id);
   return { ok: true };
 }
 
 export async function deleteTarget(ctx: Ctx, id: string): Promise<boolean> {
-  const t = await db.financialTarget.findFirst({ where: { id, workspaceId: ctx.workspace.id } });
-  if (!t) return false;
-  await db.financialTarget.delete({ where: { id: t.id } });
-  return true;
+  const sb = await getSupabaseFor(ctx);
+  const rows = unwrap(
+    await sb
+      .from("financial_targets")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .select("id")
+  ) as { id: string }[];
+  return rows.length > 0;
 }

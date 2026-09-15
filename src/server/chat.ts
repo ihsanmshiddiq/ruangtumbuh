@@ -1,8 +1,10 @@
 // Data layer server-only: pesan pribadi berdua.
-// SEMUA query difilter workspaceId — ekuivalen RLS.
+// Semua query lewat klien pengguna — RLS Supabase menegakkan batas workspace.
 // Nama pengirim selalu diselesaikan ke displayName — UUID tidak pernah keluar.
-import { db } from "@/lib/db";
+// Pesan bersifat append-only (RLS tidak menyediakan update/delete) — sesuai
+// desain Fase 5: isi percakapan tidak bisa diubah lewat API oleh siapa pun.
 import type { SessionContext } from "@/lib/types";
+import { getSupabaseFor, unwrap } from "@/server/db";
 
 type Ctx = SessionContext;
 
@@ -15,64 +17,83 @@ export type MessageDTO = {
   mine: boolean;
 };
 
-export async function listMessages(ctx: Ctx, limit = 200): Promise<MessageDTO[]> {
-  const rows = await db.message.findMany({
-    where: { workspaceId: ctx.workspace.id },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-  const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
-  return rows
-    .reverse()
-    .map((m) => ({
-      id: m.id,
-      senderId: m.senderId,
-      senderName: nameById.get(m.senderId) ?? "Anggota",
-      content: m.content,
-      createdAt: m.createdAt.toISOString(),
-      mine: m.senderId === ctx.user.id,
-    }));
+type MessageRow = {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+};
+
+function toDTO(
+  ctx: Ctx,
+  m: MessageRow,
+  nameById: Map<string, string>
+): MessageDTO {
+  return {
+    id: m.id,
+    senderId: m.sender_id,
+    senderName: nameById.get(m.sender_id) ?? "Anggota",
+    content: m.content,
+    createdAt: new Date(m.created_at).toISOString(),
+    mine: m.sender_id === ctx.user.id,
+  };
 }
 
-/** Pesan setelah suatu waktu — dipakai polling ringan (realtime sandbox). */
+export async function listMessages(ctx: Ctx, limit = 200): Promise<MessageDTO[]> {
+  const sb = await getSupabaseFor(ctx);
+  const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
+  const rows = unwrap(
+    await sb
+      .from("messages")
+      .select("id, sender_id, content, created_at")
+      .eq("workspace_id", ctx.workspace.id)
+      .order("created_at", { ascending: false })
+      .limit(limit)
+  ) as MessageRow[];
+  return rows
+    .reverse()
+    .map((m) => toDTO(ctx, m, nameById));
+}
+
+/** Pesan setelah suatu waktu — dipakai polling ringan. */
 export async function listMessagesAfter(ctx: Ctx, iso: string, limit = 100): Promise<MessageDTO[]> {
   const since = new Date(iso);
   if (Number.isNaN(since.getTime())) return listMessages(ctx, limit);
-  const rows = await db.message.findMany({
-    where: { workspaceId: ctx.workspace.id, createdAt: { gt: since } },
-    orderBy: { createdAt: "asc" },
-    take: limit,
-  });
+  const sb = await getSupabaseFor(ctx);
   const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
-  return rows.map((m) => ({
-    id: m.id,
-    senderId: m.senderId,
-    senderName: nameById.get(m.senderId) ?? "Anggota",
-    content: m.content,
-    createdAt: m.createdAt.toISOString(),
-    mine: m.senderId === ctx.user.id,
-  }));
+  const rows = unwrap(
+    await sb
+      .from("messages")
+      .select("id, sender_id, content, created_at")
+      .eq("workspace_id", ctx.workspace.id)
+      .gt("created_at", since.toISOString())
+      .order("created_at", { ascending: true })
+      .limit(limit)
+  ) as MessageRow[];
+  return rows.map((m) => toDTO(ctx, m, nameById));
 }
 
 export async function sendMessage(ctx: Ctx, content: string): Promise<MessageDTO> {
   const trimmed = content.trim().slice(0, 2000);
   if (!trimmed) throw new Error("Pesan tidak boleh kosong.");
-  const row = await db.message.create({
-    data: { workspaceId: ctx.workspace.id, senderId: ctx.user.id, content: trimmed },
-  });
+  const sb = await getSupabaseFor(ctx);
+  const row = unwrap(
+    await sb
+      .from("messages")
+      .insert({
+        workspace_id: ctx.workspace.id,
+        sender_id: ctx.user.id, // dari sesi — RLS menegakkan juga
+        content: trimmed,
+      })
+      .select("id, sender_id, content, created_at")
+      .single()
+  ) as MessageRow;
   return {
     id: row.id,
-    senderId: row.senderId,
+    senderId: row.sender_id,
     senderName: ctx.user.displayName,
     content: row.content,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: new Date(row.created_at).toISOString(),
     mine: true,
   };
-}
-
-export async function deleteOwnMessage(ctx: Ctx, id: string): Promise<boolean> {
-  const m = await db.message.findFirst({ where: { id, workspaceId: ctx.workspace.id } });
-  if (!m || m.senderId !== ctx.user.id) return false;
-  await db.message.delete({ where: { id: m.id } });
-  return true;
 }
