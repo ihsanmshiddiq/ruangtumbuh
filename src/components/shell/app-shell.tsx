@@ -215,7 +215,6 @@ export function AppShell({ session }: { session: SessionContext }) {
             <p className="rt-fine">
               {session.workspace.name} · data hanya untuk dua anggota workspace ini.
             </p>
-            <p className="rt-fine">Fase 2 — responsif mobile & PWA.</p>
           </div>
         </footer>
 

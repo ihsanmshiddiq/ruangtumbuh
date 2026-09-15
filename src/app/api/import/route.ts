@@ -154,6 +154,94 @@ const backupSchema = z.object({
 
 type Backup = z.infer<typeof backupSchema>;
 
+/**
+ * Jembatan kompatibilitas: backup Buku Kas lama (file HTML versi sebelumnya,
+ * format {transactions, categories, allocationPlan, targetGoal, ...}) →
+ * format backup Ruang Tumbuh. Deteksi dari bentuk file, bukan ekstensi.
+ * Konversi jujur: kategori dipetakan by-name, transaksi tanpa kategori yang
+ * dikenal dibuang, catatan dipotong ke batas yang sama dengan format baru.
+ */
+function convertLegacyBukuKas(input: unknown): unknown | null {
+  if (typeof input !== "object" || input === null) return null;
+  const raw = input as Record<string, unknown>;
+  // Format baru punya penanda "app"; format lama tidak dan langsung punya
+  // transactions + categories di akar.
+  if (typeof raw.app === "string") return null;
+  if (!Array.isArray(raw.transactions) || !Array.isArray(raw.categories)) return null;
+
+  const clip = (s: unknown, n: number) => String(s ?? "").slice(0, n);
+  const num = (v: unknown) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+
+  type LegacyCat = { id?: unknown; name?: unknown; type?: unknown; bucket?: unknown; target?: unknown };
+  const cats = (raw.categories as LegacyCat[]).filter((c) => typeof c?.name === "string" && (c.name as string).trim() !== "");
+  const nameById = new Map<string, string>();
+  for (const c of cats) {
+    if (typeof c.id === "string") nameById.set(c.id, clip(c.name, 40).trim());
+  }
+
+  const transactions = (raw.transactions as Record<string, unknown>[])
+    .map((t) => ({
+      date: typeof t.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : null,
+      type: t.type === "income" ? "income" : "expense",
+      category: nameById.get(String(t.categoryId ?? "")) ?? "",
+      amount: num(t.amount),
+      note: clip(t.note, 300),
+    }))
+    .filter((t) => t.date !== null && t.category !== "" && t.amount > 0);
+
+  const categories = cats.map((c) => ({
+    name: clip(c.name, 40).trim(),
+    type: c.type === "income" ? "income" : "expense",
+    bucket:
+      c.bucket === "income" || c.bucket === "needs" || c.bucket === "wants" ||
+      c.bucket === "charity" || c.bucket === "savings" || c.bucket === "target"
+        ? c.bucket
+        : c.type === "income"
+          ? "income"
+          : "needs",
+    monthlyTarget: num(c.target),
+    active: true,
+  }));
+
+  // Dana target: targetGoal lama → satu dana target; terkumpul diambil dari
+  // riwayat alokasi (pos target) bila ada — faktanya apa adanya.
+  const targetGoal = num((raw.targetGoal as number) ?? 0);
+  const history = Array.isArray(raw.allocationHistory) ? (raw.allocationHistory as Record<string, unknown>[]) : [];
+  const collected = history.reduce((s, h) => {
+    const splits = (h?.splits ?? {}) as Record<string, unknown>;
+    return s + num(splits.target);
+  }, 0);
+  const targets = targetGoal > 0 ? [{ name: "Dana Target", targetAmount: targetGoal, currentAmount: Math.min(collected, targetGoal), active: true }] : [];
+
+  // Rencana alokasi 5 pos lama → format daftar pos baru.
+  const plan = (raw.allocationPlan ?? {}) as Record<string, unknown>;
+  const items = [
+    { label: "Kebutuhan", percent: num(plan.needs) },
+    { label: "Keinginan", percent: num(plan.wants) },
+    { label: "Sedekah", percent: num(plan.charity) },
+    { label: "Tabungan", percent: num(plan.savings) },
+    { label: "Dana target", percent: num(plan.target) },
+  ];
+  const total = items.reduce((s, i) => s + i.percent, 0);
+
+  return {
+    app: "ruang-tumbuh",
+    version: 3,
+    workspace: {
+      activities: [],
+      activityLogs: [],
+      energyLogs: [],
+      reflections: [],
+      finance: { categories, transactions, targets },
+      notes: [],
+      allocationItems: total === 100 ? items : [],
+    },
+  };
+}
+
 export async function POST(req: NextRequest) {
   const ctx = await getMembershipContext();
   if (!ctx) {
@@ -174,7 +262,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Validasi penuh SEKARANG, sebelum menyentuh database.
-  const parsed = backupSchema.safeParse(body.data);
+  // File Buku Kas lama otomatis diterjemahkan dulu bila terdeteksi.
+  const converted = convertLegacyBukuKas(body.data);
+  const parsed = backupSchema.safeParse(converted ?? body.data);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     const path = first?.path?.join(".") ?? "(akar)";

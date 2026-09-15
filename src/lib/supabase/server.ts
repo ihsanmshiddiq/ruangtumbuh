@@ -14,15 +14,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { supabaseEnv } from "@/lib/supabase/env";
 
 export type ServiceSupabase = SupabaseClient;
 
-export function supabaseEnv(): { url: string; key: string } | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return { url, key };
-}
+export { supabaseEnv };
 
 /** Klien pengguna: sesi dibaca/ditulis lewat cookie (RLS aktif). */
 export async function createServerSupabase(): Promise<SupabaseClient> {
@@ -54,10 +50,10 @@ let serviceClient: SupabaseClient | null = null;
  * Produksi (Vercel): env ini sengaja tidak ada → selalu null.
  */
 export function createServiceSupabase(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const env = supabaseEnv();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  serviceClient ??= createClient(url, key, {
+  if (!env || !key) return null;
+  serviceClient ??= createClient(env.url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
   return serviceClient;

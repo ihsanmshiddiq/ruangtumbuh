@@ -2,7 +2,15 @@
 
 // Helper client untuk API: pesan error server selalu manusiawi (dibuat di
 // src/server/api.ts), loading state eksplisit, tanpa dependensi tambahan.
+//
+// Cache kecil per-URL (pola stale-while-revalidate): pindah tab memakai data
+// yang sudah pernah diambil → UI langsung tergambar tanpa spinner, sementara
+// data terbaru tetap diambil ulang dari server di belakang. Server tetap
+// satu-satunya sumber kebenaran; cache cuma supaya navigasi terasa instan
+// (data Supabase kini via jaringan, bukan database lokal).
 import { useCallback, useEffect, useState } from "react";
+
+const cache = new Map<string, unknown>();
 
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -21,23 +29,42 @@ export function useApi<T>(url: string | null) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(url !== null);
 
-  const refetch = useCallback(async () => {
-    if (!url) return;
-    setLoading(true);
-    try {
-      const result = await apiFetch<T>(url);
-      setData(result);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ada gangguan.");
-    } finally {
-      setLoading(false);
-    }
-  }, [url]);
+  const refetch = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!url) return;
+      const hasCache = cache.has(url);
+      if (opts?.silent && hasCache) {
+        // Revalidasi di belakang — jangan kedipkan spinner.
+      } else {
+        setLoading(true);
+      }
+      try {
+        const result = await apiFetch<T>(url);
+        cache.set(url, result);
+        setData(result);
+        setError(null);
+      } catch (e) {
+        // Bila gagal tapi cache ada, tetap tampilkan data lama + pesan halus.
+        setError(e instanceof Error ? e.message : "Ada gangguan.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [url]
+  );
 
   useEffect(() => {
-    void refetch();
-  }, [refetch]);
+    if (!url) return;
+    const cached = cache.get(url) as T | undefined;
+    if (cached !== undefined) {
+      // Paint instan dari cache, lalu segarkan di belakang.
+      setData(cached);
+      setLoading(false);
+      void refetch({ silent: true });
+    } else {
+      void refetch();
+    }
+  }, [refetch, url]);
 
   return { data, error, loading, refetch, setData };
 }
