@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import {
   NotebookPen, ChevronLeft, ChevronRight, Send, MessageCircle,
-  CalendarArrowDown, SkipForward, Clock, Wallet, Sparkles,
+  CalendarArrowDown, SkipForward, Clock, Wallet, Sparkles, CircleSlash,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -102,12 +102,13 @@ export function ReflectionSection() {
               />
             ) : (
               <Panel>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {[
                     { label: "direncanakan", value: data.review.planned },
                     { label: "selesai", value: data.review.done },
                     { label: "dipindah", value: data.review.rescheduled },
                     { label: "dilewati", value: data.review.skipped },
+                    { label: "tak bisa", value: data.review.unavailable },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded-xl border border-border/70 bg-white/[0.02] px-3 py-2.5">
                       <p className="font-[family-name:var(--font-plex-mono)] text-lg font-semibold">{value}</p>
@@ -168,8 +169,10 @@ export function ReflectionSection() {
             </Panel>
           )}
 
-          {/* 3. PERPINDAHAN & PENUNDAAN — bagian normal perencanaan */}
-          {(data.review.moves.length > 0 || data.review.skippedList.length > 0) && (
+          {/* 3. PERPINDAHAN, PENUNDAAN & TAK BISA — bagian normal perencanaan */}
+          {(data.review.moves.length > 0 ||
+            data.review.skippedList.length > 0 ||
+            data.review.unavailableList.length > 0) && (
             <div className="grid gap-3 sm:grid-cols-2">
               {data.review.moves.length > 0 && (
                 <Panel>
@@ -207,6 +210,26 @@ export function ReflectionSection() {
                     ))}
                   </ul>
                   <p className="rt-fine mt-2">Penyebabnya hanya kalian yang tahu — aplikasi tidak menebak.</p>
+                </Panel>
+              )}
+              {data.review.unavailableList.length > 0 && (
+                <Panel>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CircleSlash className="w-4 h-4 text-rt-lilac" aria-hidden="true" />
+                    <p className="rt-kicker">tak bisa dilakukan · {data.review.unavailableList.length}×</p>
+                  </div>
+                  <ul className="space-y-1.5">
+                    {data.review.unavailableList.map((s, i) => (
+                      <li key={`${s.activityName}-${i}`} className="text-[0.84rem] flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{s.activityName}</span>
+                        <span className="font-[family-name:var(--font-plex-mono)] text-[0.74rem] text-muted-foreground">
+                          {tanggalPendek(s.date)}
+                        </span>
+                        {s.note && <span className="text-[0.78rem] text-muted-foreground">— {s.note}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="rt-fine mt-2">Tidak digeser, bukan kegagalan — konteksnya hanya dari catatan kalian.</p>
                 </Panel>
               )}
             </div>

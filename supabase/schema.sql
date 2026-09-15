@@ -118,7 +118,7 @@ create table public.activity_logs (
   activity_id              uuid not null references public.activities (id) on delete cascade,
   user_id                  uuid not null references auth.users (id) on delete cascade,
   date                     date not null,
-  status                   text not null default 'planned' check (status in ('planned', 'done', 'skipped', 'rescheduled')),
+  status                   text not null default 'planned' check (status in ('planned', 'done', 'skipped', 'rescheduled', 'unavailable')),
   planned_duration_minutes integer,
   actual_duration_minutes  integer,
   note                     text not null default '',
@@ -139,7 +139,7 @@ create table public.weekly_plan_entries (
   date               date not null,
   planned_start_time text check (planned_start_time is null or planned_start_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
   planned_end_time   text check (planned_end_time is null or planned_end_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
-  status             text not null default 'planned' check (status in ('planned', 'done', 'skipped', 'rescheduled')),
+  status             text not null default 'planned' check (status in ('planned', 'done', 'skipped', 'rescheduled', 'unavailable')),
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now(),
   constraint weekly_plan_entries_activity_user_date_unique unique (activity_id, user_id, date)
@@ -438,6 +438,13 @@ create policy "workspace_members_member_select" on public.workspace_members
 -- SELECT memakai USING, INSERT memakai WITH CHECK (memeriksa workspace_id
 -- baris BARU), UPDATE memakai keduanya, DELETE memakai USING. Tanpa kebijakan,
 -- akses ditolak secara default.
+--
+-- IDENTITAS PENULIS: kolom user (user_id/created_by/sender_id) harus selalu
+-- auth.uid() — identitas berasal dari sesi, bukan dari input frontend.
+-- Untuk tabel gabungan seperti activity_logs/weekly_plan_entries (yang memakai
+-- user_id sebagai bagian unique key milik masing-masing orang), kolom user
+-- juga terikat auth.uid() sehingga satu orang tidak dapat menulis log atas
+-- nama pasangannya. Sender pada messages juga terikat auth.uid() (lihat atas).
 -- Catatan kinerja: untuk dataset besar pola "(select auth.uid())" lebih cepat
 -- (init-plan); untuk dua pengguna tidak diperlukan.
 
@@ -670,6 +677,8 @@ create policy "comments_member_delete" on public.comments
   ));
 
 -- ── messages ──
+-- APPEND-ONLY: hanya SELECT dan INSERT. Tidak ada kebijakan UPDATE/DELETE —
+-- percakapan pribadi tidak boleh diretas/dihapus lewat API oleh siapa pun.
 create policy "messages_member_select" on public.messages
   for select to authenticated
   using (exists (
@@ -680,32 +689,14 @@ create policy "messages_member_select" on public.messages
 
 create policy "messages_member_insert" on public.messages
   for insert to authenticated
-  with check (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = messages.workspace_id
-      and wm.user_id = auth.uid()
-  ));
-
-create policy "messages_member_update" on public.messages
-  for update to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = messages.workspace_id
-      and wm.user_id = auth.uid()
-  ))
-  with check (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = messages.workspace_id
-      and wm.user_id = auth.uid()
-  ));
-
-create policy "messages_member_delete" on public.messages
-  for delete to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = messages.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  with check (
+    messages.sender_id = auth.uid()
+    and exists (
+      select 1 from public.workspace_members wm
+      where wm.workspace_id = messages.workspace_id
+        and wm.user_id = auth.uid()
+    )
+  );
 
 -- ── transaction_categories ──
 create policy "transaction_categories_member_select" on public.transaction_categories

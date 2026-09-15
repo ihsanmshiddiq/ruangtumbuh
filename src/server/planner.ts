@@ -29,7 +29,7 @@ export type OccurrenceDTO = {
   activityDescription: string;
   date: string;
   dow: number; // 0..6 urutan minggu
-  status: "planned" | "done" | "skipped" | "rescheduled";
+  status: "planned" | "done" | "skipped" | "rescheduled" | "unavailable";
   plannedStartTime: string | null;
   plannedDurationMinutes: number | null;
   actualDurationMinutes: number | null;
@@ -286,26 +286,27 @@ export async function deleteOccurrence(ctx: Ctx, id: string): Promise<boolean> {
   return true;
 }
 
-/** Set status kejadian (done/skipped/planned). reschedule memakai rescheduleOccurrence. */
+/** Set status kejadian (done/skipped/unavailable/kembali planned). Reschedule memakai rescheduleOccurrence. */
 export async function setOccurrenceStatus(
   ctx: Ctx,
   id: string,
-  status: "planned" | "done" | "skipped",
-  actualDurationMinutes?: number | null
+  status: "planned" | "done" | "skipped" | "unavailable",
+  extra?: { actualDurationMinutes?: number | null; note?: string }
 ): Promise<boolean> {
   const existing = await db.activityLog.findFirst({
     where: { id, workspaceId: ctx.workspace.id, userId: ctx.user.id },
   });
   if (!existing) return false;
-  const data: { status: string; actualDurationMinutes?: number } = { status };
+  const data: { status: string; actualDurationMinutes?: number; note?: string } = { status };
   // Durasi aktual hanya disimpan bila dicatat (0–1440 menit); null diabaikan.
-  if (
-    typeof actualDurationMinutes === "number" &&
-    Number.isInteger(actualDurationMinutes) &&
-    actualDurationMinutes >= 0 &&
-    actualDurationMinutes <= 1440
-  ) {
-    data.actualDurationMinutes = actualDurationMinutes;
+  const dur = extra?.actualDurationMinutes;
+  if (typeof dur === "number" && Number.isInteger(dur) && dur >= 0 && dur <= 1440) {
+    data.actualDurationMinutes = dur;
+  }
+  // Catatan/konteks (mis. alasan "unavailable") — dibersihkan, dibatasi panjang.
+  if (extra?.note !== undefined) {
+    const note = extra.note.trim().slice(0, 300);
+    data.note = note;
   }
   await db.activityLog.update({ where: { id: existing.id }, data });
   await db.weeklyPlanEntry.updateMany({
@@ -336,6 +337,8 @@ export async function rescheduleOccurrence(
   });
   if (!existing) return { ok: false, error: "Kejadian tidak ditemukan." };
   if (existing.status === "done") return { ok: false, error: "Aktivitas yang sudah selesai tidak perlu dipindahkan." };
+  // Tanggal tujuan sama = tidak ada perubahan — anggap berhasil (idempoten).
+  if (target.date === existing.date) return { ok: true };
 
   await db.activityLog.update({
     where: { id: existing.id },
@@ -373,7 +376,14 @@ export async function ensureWeekPlanned(ctx: Ctx, weekStart: string): Promise<vo
     where: { workspaceId: ctx.workspace.id, date: { in: dates }, userId: ctx.user.id },
     select: { activityId: true, date: true, rescheduledFrom: true },
   });
-  const existingSet = new Set(existing.filter((e) => !e.rescheduledFrom).map((e) => `${e.activityId}|${e.date}`));
+  // Semua baris existing menempati unique (activityId,userId,date) — termasuk
+  // hasil reschedule — jadi semuanya masuk set agar createMany tidak menabrak.
+  const existingSet = new Set(existing.map((e) => `${e.activityId}|${e.date}`));
+  // Tanggal asal yang sengaja ditinggalkan (kejadian dipindah) tidak boleh
+  // dihidupkan ulang otomatis oleh ensure — itu keputusan pengguna.
+  const vacated = new Set(
+    existing.filter((e) => e.rescheduledFrom).map((e) => `${e.activityId}|${e.rescheduledFrom}`),
+  );
 
   const creates: {
     workspaceId: string; activityId: string; userId: string; date: string;
@@ -385,7 +395,8 @@ export async function ensureWeekPlanned(ctx: Ctx, weekStart: string): Promise<vo
   }[] = [];
   for (const a of activities) {
     for (const date of dates) {
-      if (existingSet.has(`${a.id}|${date}`)) continue;
+      const key = `${a.id}|${date}`;
+      if (existingSet.has(key) || vacated.has(key)) continue;
       const dow = DOW_TO_WEEK_INDEX[parseLocalDow(date)];
       if (a.preferredDays.length > 0 && !a.preferredDays.includes(dow)) continue;
       creates.push({

@@ -63,3 +63,10 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Backfill dengan UUID asli — lokal saja, jangan di-commit
+supabase/backfill.local.sql
+
+# Aset & data lokal (referensi pribadi, jangan dipublikasikan)
+upload/
+download/
+scripts/.p*-cleanup.json

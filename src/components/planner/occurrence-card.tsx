@@ -3,7 +3,7 @@
 // Kartu satu kejadian aktivitas — dipakai Today & Planner.
 // Aksi cepat: Selesai / Lewati / Pindah. Waktu ditampilkan manusiawi
 // ("sekitar 19:15"), status berlabel teks (bukan warna saja).
-import { Check, X, CalendarArrowDown } from "lucide-react";
+import { Check, X, CalendarArrowDown, CircleSlash } from "lucide-react";
 import { StatusBadge } from "@/components/shared/ui-bits";
 import { durasiMenit, sekitarJam } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ export function OccurrenceCard({
   onDone,
   onSkip,
   onReschedule,
+  onUnavailable,
   compact = false,
 }: {
   occ: OccurrenceDTO;
@@ -22,6 +23,7 @@ export function OccurrenceCard({
   onDone: () => void;
   onSkip: () => void;
   onReschedule: () => void;
+  onUnavailable?: () => void;
   compact?: boolean;
 }) {
   const waktu = sekitarJam(occ.plannedStartTime);
@@ -89,6 +91,18 @@ export function OccurrenceCard({
               className="h-10 w-10 grid place-items-center rounded-lg border border-border text-muted-foreground transition-colors active:bg-white/[0.05]"
             >
               <X className="w-[18px] h-[18px]" aria-hidden="true" />
+            </button>
+          )}
+          {!isDone && onUnavailable && (
+            <button
+              type="button"
+              onClick={onUnavailable}
+              disabled={busy}
+              aria-label={`Tandai ${occ.activityName} tidak bisa dilakukan`}
+              title="Tidak bisa dilakukan"
+              className="h-10 w-10 hidden sm:grid place-items-center rounded-lg border border-rt-violet/35 bg-rt-violet/10 text-rt-lilac transition-colors active:bg-rt-violet/20"
+            >
+              <CircleSlash className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
           )}
           {!isDone && (

@@ -6,6 +6,7 @@ import {
   Loader2,
   LogOut,
   Download,
+  Upload,
   UserRound,
   UsersRound,
   Palette,
@@ -26,6 +27,8 @@ export function SettingsView({ session }: { session: SessionContext }) {
   const [name, setName] = useState(session.user.displayName);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [pendingRestore, setPendingRestore] = useState<{ summary: string; data: unknown } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function saveName() {
@@ -75,6 +78,65 @@ export function SettingsView({ session }: { session: SessionContext }) {
       toast({ title: "Ekspor gagal. Coba lagi." });
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function onBackupFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: "File terlalu besar (maksimal 20 MB)." });
+      return;
+    }
+    let data: unknown;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      toast({ title: "File bukan JSON yang valid." });
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "preview", data }),
+      });
+      const out = (await res.json().catch(() => null)) as { summary?: string; error?: string } | null;
+      if (!res.ok) {
+        toast({ title: out?.error ?? "File backup tidak valid." });
+        return;
+      }
+      setPendingRestore({ summary: out?.summary ?? "", data });
+    } catch {
+      toast({ title: "Tidak dapat menghubungi server." });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function doRestore() {
+    if (!pendingRestore) return;
+    setImporting(true);
+    try {
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "restore", data: pendingRestore.data }),
+      });
+      const out = (await res.json().catch(() => null)) as { message?: string; error?: string } | null;
+      if (!res.ok) {
+        toast({ title: out?.error ?? "Pemulihan gagal. Data tidak diubah." });
+        return;
+      }
+      toast({ title: out?.message ?? "Pemulihan selesai." });
+      setPendingRestore(null);
+      router.refresh();
+    } catch {
+      toast({ title: "Tidak dapat menghubungi server." });
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -202,19 +264,56 @@ export function SettingsView({ session }: { session: SessionContext }) {
           <h3 className="font-semibold text-[0.95rem]">Data</h3>
         </div>
         <p className="text-[0.86rem] text-muted-foreground leading-relaxed mb-4">
-          Unduh salinan data workspace yang bisa kamu akses, dalam format JSON portabel.
-          Ekspor penuh (aktivitas, log, refleksi, transaksi) akan terisi otomatis
-          seiring data terbentuk di fase berikutnya. Impor tidak akan pernah menimpa
-          data tanpa konfirmasi eksplisit.
+          Unduh cadangan lengkap: aktivitas, log, energi, refleksi, komentar, chat,
+          dan seluruh Buku Kas — dalam satu file JSON. File ini berisi data pribadi
+          kalian: simpan di tempat aman dan jangan dibagikan. Pemulihan hanya
+          MENAMBAH data — tidak pernah menghapus atau menimpa.
         </p>
-        <Button variant="outline" onClick={exportData} disabled={exporting} className="h-9">
-          {exporting ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <Download className="w-3.5 h-3.5" aria-hidden="true" />
-          )}
-          Ekspor data saya
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={exportData} disabled={exporting} className="h-9">
+            {exporting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            )}
+            Unduh cadangan
+          </Button>
+          <Label
+            htmlFor="backup-file"
+            className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-transparent px-4 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+          >
+            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Upload className="w-3.5 h-3.5" aria-hidden="true" />}
+            Pulihkan dari file
+          </Label>
+          <input
+            id="backup-file"
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={onBackupFile}
+            disabled={importing}
+          />
+        </div>
+        {pendingRestore && (
+          <div className="mt-4 rounded-xl border border-rt-teal/30 bg-rt-teal/[0.05] px-4 py-3">
+            <p className="rt-kicker text-[0.55rem] mb-1">pratinjau pemulihan</p>
+            <p className="text-[0.84rem] leading-relaxed">{pendingRestore.summary}</p>
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" className="h-9" onClick={doRestore} disabled={importing}>
+                {importing && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                Pulihkan sekarang
+              </Button>
+              <Button size="sm" variant="outline" className="h-9" onClick={() => setPendingRestore(null)} disabled={importing}>
+                Batal
+              </Button>
+            </div>
+          </div>
+        )}
+        <p className="rt-fine mt-4 flex items-start gap-2">
+          <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+          Pemulihan hanya bisa dilakukan oleh pemilik workspace, dan tidak dikirim ke
+          layanan pihak ketiga mana pun.
+        </p>
       </div>
 
       {/* ── Aplikasi (PWA) ─────────────────────────────────────────── */}

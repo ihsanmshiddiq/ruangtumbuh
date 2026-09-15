@@ -8,13 +8,11 @@ import { db } from "@/lib/db";
 export const SESSION_COOKIE = "rt_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 hari
 
-// ─── Mode pratinjau (SEMENTARA — selama pengembangan) ──────────────────────
-// Gerbang login DILEWATI: aplikasi langsung dirender memakai identitas anggota
-// pertama workspace (pemilik). Layar login tetap utuh di kodenya dan akan
-// diaktifkan kembali di fase akhir.
-// TODO(AKHIR): setel `AUTH_BYPASS = false` — atau env AUTH_BYPASS=0 — saat
-// login email + kata sandi diaktifkan lagi.
-const AUTH_BYPASS = process.env.AUTH_BYPASS !== "0";
+// ─── Mode pratinjau (lokal saja — OPT-IN eksplisit) ──────────────────────────
+// Default: AMAN — semua request wajib cookie sesi valid.
+// Mode pratinjau hanya aktif bila env AUTH_BYPASS=1 diset di mesin lokal
+// (lihat .env.example). Jangan pernah diset di produksi.
+const AUTH_BYPASS = process.env.AUTH_BYPASS === "1";
 
 export type SessionContext = {
   authMode: "session" | "bypass";

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { OccurrenceCard } from "@/components/planner/occurrence-card";
 import { RescheduleDrawer } from "@/components/planner/reschedule-drawer";
+import { UnavailableDrawer } from "@/components/planner/unavailable-drawer";
 import { SectionHeader, EmptyState, Panel, TinySpinner } from "@/components/shared/ui-bits";
 import { useApi, apiFetch } from "@/lib/client";
 import { weekDates, weekStartOf, addDays, tanggalIndo, tanggalPendek, durasiMenit, HARI_SINGKAT, DOW_TO_WEEK_INDEX } from "@/lib/dates";
@@ -26,6 +27,7 @@ export function PlannerSection() {
   const [selectedDow, setSelectedDow] = useState<number>(() => DOW_TO_WEEK_INDEX[new Date().getDay()]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [resched, setResched] = useState<OccurrenceDTO | null>(null);
+  const [unavail, setUnavail] = useState<OccurrenceDTO | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [durationTarget, setDurationTarget] = useState<OccurrenceDTO | null>(null);
 
@@ -168,6 +170,7 @@ export function PlannerSection() {
                 onDone={() => setStatus(occ, "done")}
                 onSkip={() => setStatus(occ, "skipped")}
                 onReschedule={() => setResched(occ)}
+                onUnavailable={() => setUnavail(occ)}
               />
             ))}
           </div>
@@ -212,6 +215,16 @@ export function PlannerSection() {
         open={resched !== null}
         onOpenChange={(v) => !v && setResched(null)}
         onConfirm={handleReschedule}
+      />
+
+      <UnavailableDrawer
+        occ={unavail}
+        onOpenChange={(v) => !v && setUnavail(null)}
+        onSaved={async (msg) => {
+          setUnavail(null);
+          toast({ title: msg });
+          await refetch();
+        }}
       />
 
       <ActivityDrawer

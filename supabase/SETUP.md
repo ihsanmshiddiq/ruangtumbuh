@@ -87,7 +87,17 @@ Semua langkah di bagian ini dijalankan di **SQL Editor**. Ini memang disengaja:
 pembuatan workspace dan keanggotaan tidak punya jalur dari frontend, sehingga
 hanya bisa dilakukan dari sini (postgres melewati RLS).
 
-**5a. Backfill profil untuk kedua user yang sudah ada:**
+**5a–5c. Backfill profil + workspace + keanggotaan (SUDAH TERISI OTOMATIS):**
+
+File **`supabase/backfill.local.sql`** (lokal, tidak di-commit) sudah berisi UUID
+dua user dan siap dijalankan langsung:
+
+1. Buka isi file `supabase/backfill.local.sql`
+2. Tempel seluruh isinya ke **SQL Editor** → **Run**
+3. Bagian verifikasi di akhir harus menampilkan 2 baris: `owner` (Ihsan) dan
+   `partner` (Tantri)
+
+> Ingin menulis manual? Template query-nya ada di bawah.
 
 ```sql
 insert into public.profiles (id, display_name)
@@ -96,33 +106,9 @@ from auth.users u
 where not exists (select 1 from public.profiles p where p.id = u.id);
 ```
 
-Nama tampilan ini hanya nilai awal — bisa diganti kapan saja dari aplikasi.
-
-**5b. Temukan UUID kedua user:**
-
-```sql
-select id, email, created_at from auth.users order by created_at;
-```
-
-Catat dua UUID yang muncul.
-
-**5c. Buat SATU workspace dan DUA baris keanggotaan.**
-Ganti `<USER_A_UUID>` (pemilik) dan `<USER_B_UUID>` (pasangan) dengan UUID asli:
-
-```sql
-with ws as (
-  insert into public.workspaces (name)
-  values ('Ruang Tumbuh')
-  returning id
-)
-insert into public.workspace_members (workspace_id, user_id, role)
-select ws.id, m.user_id, m.role
-from ws,
-     (values ('<USER_A_UUID>'::uuid, 'owner'),
-             ('<USER_B_UUID>'::uuid, 'partner')) as m(user_id, role);
-```
-
 **5d. Verifikasi:**
+
+Query verifikasi sudah ada di akhir `backfill.local.sql`. Atau manual:
 
 ```sql
 select wm.role, u.email

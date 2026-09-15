@@ -88,14 +88,14 @@ Task: Diagnosa "Gagal masuk. Coba lagi." pada login mitra@ruangtumbuh.app (lapor
 Work Log:
 - Baca dev.log: query Profile by email SUKSES, password verifikasi LOLOS, crash di auth.ts getSecret() — `SESSION_SECRET belum dikonfigurasi di .env` → POST /api/auth/login 500 → frontend menampilkan error generik.
 - Inspeksi .env: hanya berisi DATABASE_URL. Variabel SESSION_SECRET + SEED_* hilang (diduga .env ter-reset saat restore environment; file DB tetap utuh).
-- Verifikasi DB via script: kedua profil ada (ihsan=owner, mitra=partner), keduanya cocok dengan password `Tumbuh-2026-Dua`; workspace "Ruang Tumbuh" utuh.
+- Verifikasi DB via script: kedua profil ada (ihsan=owner, mitra=partner), keduanya cocok dengan password (disunting dari laporan — lihat password manager); workspace "Ruang Tumbuh" utuh.
 - Pulihkan .env: SESSION_SECRET (openssl rand -base64 32) + SEED_OWNER/PARTNER EMAIL/PASSWORD (kredensial tidak pernah ditulis di source code).
 - Restart server: temuan lingkungan — sandbox membunuh SEMUA proses latar yang di-spawn dari sesi tool dalam 1-2 detik setelah perintah selesai (setsid/nohup tidak membantu, cgroup read-only). Dev server asli hanya berjalan karena di-spawn boot script /start.sh (kini zombie, tanpa respawn). Tidak ada mekanisme respawn (tanpa atd/crond/systemd; supervisor python /app/main.py tidak bereaksi terhadap perubahan file).
 - Verifikasi lengkap DALAM SATU sesi (9/9 lolos): login salah→401 generik; login mitra→200+cookie rt_session; /api/session→konteks workspace+role partner; tanpa cookie→401; login ihsan→200+role owner; GET /→render "Ruang Tumbuh"; logout→200 lalu sesi 401.
 
 Stage Summary:
 - Akar masalah: .env kehilangan SESSION_SECRET (bukan password salah). SUDAH DIPERBAIKI dan terverifikasi end-to-end via API.
-- .env kembali lengkap (DATABASE_URL, SESSION_SECRET, SEED_*). Kredensial kedua akun: password sama-sama `Tumbuh-2026-Dua`.
+- .env kembali lengkap (DATABASE_URL, SESSION_SECRET, SEED_*). Kredensial kedua akun: password kedua akun sama (disunting dari laporan).
 - Keterbatasan lingkungan terkonfirmasi: hanya boot script yang dapat menjalankan dev server persisten. Setelah environment di-refresh/restart, `next dev` akan hidup lagi memakai .env yang sudah diperbaiki → login langsung berhasil.
 
 ---
@@ -177,3 +177,21 @@ Stage Summary:
 - Riwayat minggu bisa dibuka lewat navigasi; data shared vs personal ngikutin schema (review = personal, aktivitas+keuangan = workspace).
 - Sengaja ditunda: transisi "minggu depan" interaktif (copy rencana/ubah target) — baru catatan refleksi; ekspor review; chart visual.
 - Catatan: build standalone cp -r masih gagal di Windows (pre-existing, di luar cakupan).
+
+---
+Task ID: Fase-5 (Security, Privacy, Reliability, Backup)
+Agent: Buffy (Freebuff)
+Task: Audit & hardening agar repo layak publik — secret & git hygiene, auth default aman, RLS migration Supabase, status baru "unavailable" + alasan, backup lengkap + import tervalidasi dua langkah, tanpa redesign.
+
+Work Log:
+- Audit repo: temuan kritikal — password lama tertulis di worklog.md (disanitasi), upload/ (video & file pribadi) + scripts/.p4-cleanup.json ter-track git (dikeluarkan dari tracking, di-ignore), AUTH_BYPASS default ON (kini opt-in eksplisit: hanya aktif kalau AUTH_BYPASS=1 — default aplikasi selalu lewat sesi).
+- Supabase: migration-001-fase5.sql (idempoten, tanpa operasi destruktif): (1) status "unavailable" + kolom note pada ActivityLog + CHECK constraint, (2) RLS hardening — identitas terikat auth.uid() (profiles, workspace_members, occurrences, energy, reflection, comment, message, transaction, category, target), semua INSERT memaksa user_id = auth.uid(), messages append-only (tidak ada UPDATE/DELETE), allocation & weekly_plan read-only client. schema.sql disinkronkan.
+- Fitur "unavailable" end-to-end: prisma schema, validasi API (note max 300 char), unavailable-drawer (drawer bawah, konteks opsional), tombol di Today & Planner, panel di Review Mingguan; persentase penyelesaian TIDAK menghukum unavailable.
+- Backup: export v2 lengkap seluruh koleksi workspace (chat diekspor sebagai nama orang, bukan UUID; tanpa credential); import dua langkah owner-only (preview → restore) dengan validasi ketat zod (app identifier, version, tanggal ISO, weekStart harus Senin, nominal >= 0, status enum), restore hanya MENAMBAH (skip yang sudah ada, tidak pernah menghapus), idempoten; UI Backup & Pulihkan di Settings.
+- Bug ketemu pas smoke test: ensureWeekPlanned nabrak unique (activityId,userId,date) karena baris hasil reschedule dikecualikan dari set existing → 500 di /api/planner/week; plus slot asal yang sengaja ditinggalkan bisa terisi ulang otomatis. Keduanya diperbaiki.
+- Verifikasi: tsc & eslint 0 error 0 warning; smoke test Fase 5 25/25 (unavailable + note, review membaca unavailable, export tanpa credential, import menolak file rusak, restore idempoten tanpa duplikasi, batas panjang pesan); data uji [P5] dibersihkan; next build sukses (cp -r Windows tetap pre-existing).
+
+Stage Summary:
+- Repo bersih untuk dipublikasikan: tanpa secret di working tree, file pribadi keluar dari tracking, riwayat lama berisi secret lama yang SUDAH dirotasi (tak valid) — jika suatu saat repo jadi publik, pertimbangkan history rewrite lebih dulu.
+- Keamanan default: bypass pratinjau tidak bisa aktif tanpa env eksplisit; RLS menolak penulisan atas nama orang lain; pesan tidak bisa diedit/dihapus via client.
+- Sengaja ditunda: verifikasi manual di Supabase (jalankan migration-001 di SQL Editor), Vercel env vars, ekspor otomatis terjadwal ke luar (dilarang fase ini).

@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { OccurrenceCard } from "@/components/planner/occurrence-card";
 import { RescheduleDrawer } from "@/components/planner/reschedule-drawer";
+import { UnavailableDrawer } from "@/components/planner/unavailable-drawer";
 import { SectionHeader, EmptyState, Panel, TinySpinner } from "@/components/shared/ui-bits";
 import { useApi, apiFetch } from "@/lib/client";
 import { goToSection } from "@/lib/section-store";
@@ -29,6 +30,7 @@ export function TodaySection() {
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [resched, setResched] = useState<OccurrenceDTO | null>(null);
+  const [unavail, setUnavail] = useState<OccurrenceDTO | null>(null);
 
   const hariIni = useMemo(
     () => (data?.occurrences ?? []).filter((o) => o.date === today),
@@ -174,6 +176,7 @@ export function TodaySection() {
                 onDone={() => setStatus(occ, "done")}
                 onSkip={() => setStatus(occ, "skipped")}
                 onReschedule={() => setResched(occ)}
+                onUnavailable={() => setUnavail(occ)}
               />
             ))}
           </div>
@@ -186,6 +189,16 @@ export function TodaySection() {
         open={resched !== null}
         onOpenChange={(v) => !v && setResched(null)}
         onConfirm={handleReschedule}
+      />
+
+      <UnavailableDrawer
+        occ={unavail}
+        onOpenChange={(v) => !v && setUnavail(null)}
+        onSaved={async (msg) => {
+          setUnavail(null);
+          toast({ title: msg });
+          await refetch();
+        }}
       />
     </section>
   );

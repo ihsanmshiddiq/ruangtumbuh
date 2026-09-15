@@ -76,7 +76,9 @@ model Activity {
 }
 
 // Gabungan rencana + realisasi (satu entri per tanggal per aktivitas per orang).
-// Status: planned | done | skipped | rescheduled.
+// Status: planned | done | skipped | rescheduled | unavailable.
+// unavailable = aktivitas tidak dapat dilakukan pada waktu tersebut dan TIDAK
+// digeser; konteksnya ditulis di `note` (nullable berisi "" bila kosong).
 // rescheduledFrom = tanggal asal saat aktivitas digeser (riwayat dipertahankan).
 model ActivityLog {
   id                     String   @id @default(uuid())
@@ -84,7 +86,7 @@ model ActivityLog {
   activityId             String
   userId                 String
   date                   String // YYYY-MM-DD
-  status                 String   @default("planned")
+  status                 String   @default("planned") // planned|done|skipped|rescheduled|unavailable
   plannedDurationMinutes Int?
   actualDurationMinutes  Int?
   note                   String   @default("")

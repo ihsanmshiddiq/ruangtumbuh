@@ -33,6 +33,7 @@ const STATUS: Record<string, { label: string; className: string }> = {
   done: { label: "selesai", className: "border-rt-good/40 bg-rt-good/10 text-rt-good" },
   skipped: { label: "dilewati", className: "border-border bg-white/[0.03] text-muted-foreground line-through decoration-1" },
   rescheduled: { label: "dipindah", className: "border-rt-teal/40 bg-rt-teal/10 text-rt-teal" },
+  unavailable: { label: "tak bisa dilakukan", className: "border-rt-violet/40 bg-rt-violet/10 text-rt-lilac" },
 };
 
 /** Badge status dengan label teks — bukan komunikasi warna saja (a11y). */

@@ -136,6 +136,7 @@ export type WeeklyReview = {
   done: number;
   rescheduled: number;
   skipped: number;
+  unavailable: number;
   percent: number;
   perActivity: {
     activityId: string; name: string;
@@ -147,6 +148,8 @@ export type WeeklyReview = {
   moves: { activityName: string; from: string; to: string }[];
   /** Daftar kejadian yang dilewati (tanpa penyebab yang dikarang). */
   skippedList: { activityName: string; date: string }[];
+  /** Tidak bisa dilakukan — konteks hanya dari catatan pengguna. */
+  unavailableList: { activityName: string; date: string; note: string | null }[];
   /** Hari dengan energi terendah (untuk catatan hati-hati, bukan klaim). */
   lowestEnergy: { date: string; level: number } | null;
   rescheduledOnLowestEnergy: number;
@@ -163,6 +166,8 @@ export async function getWeeklyReview(ctx: Ctx, weekStart: string): Promise<Week
   const done = finalOcc.filter((o) => o.status === "done").length;
   const rescheduled = occ.length - finalOcc.length;
   const skipped = finalOcc.filter((o) => o.status === "skipped").length;
+  // Tidak bisa dilakukan (tidak digeser, bukan kegagalan — hanya fakta).
+  const unavailable = finalOcc.filter((o) => o.status === "unavailable").length;
 
   const byActivity = new Map<string, WeeklyReview["perActivity"][number]>();
   for (const o of finalOcc) {
@@ -200,6 +205,13 @@ export async function getWeeklyReview(ctx: Ctx, weekStart: string): Promise<Week
     .map((o) => ({ activityName: o.activityName, date: o.date }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Yang tidak bisa dilakukan — ditampilkan dengan konteks aslinya (note),
+  // bukan dikarang penyebabnya.
+  const unavailableList = occ
+    .filter((o) => o.status === "unavailable")
+    .map((o) => ({ activityName: o.activityName, date: o.date, note: o.note || null }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   const nameById = new Map(ctx.workspace.members.map((m) => [m.id, m.displayName]));
   const energyByUser = Object.entries(week.energyByUser).map(([userId, days]) => ({
     userName: nameById.get(userId) ?? "Anggota",
@@ -220,12 +232,13 @@ export async function getWeeklyReview(ctx: Ctx, weekStart: string): Promise<Week
 
   return {
     weekStart: week.weekStart,
-    planned, done, rescheduled, skipped,
+    planned, done, rescheduled, skipped, unavailable,
     percent: planned > 0 ? Math.round((done / planned) * 100) : 0,
     perActivity: [...byActivity.values()].sort((a, b) => b.done - a.done),
     energyByUser,
     moves,
     skippedList,
+    unavailableList,
     lowestEnergy,
     rescheduledOnLowestEnergy,
   };
@@ -283,6 +296,11 @@ export function buildInsights(review: WeeklyReview, weekStart: string, finance?:
   // 2) Perpindahan
   if (review.moves.length > 0) {
     insights.push(`${review.moves.length} kejadian dipindahkan minggu ini.`);
+  }
+
+  // 2b) Tidak bisa dilakukan — fakta saja
+  if (review.unavailable > 0) {
+    insights.push(`${review.unavailable} kejadian tidak bisa dilakukan pada waktunya minggu ini.`);
   }
 
   // 3) Energi — bahasa hati-hati, korelasi bukan sebab-akibat
