@@ -126,6 +126,16 @@ const backupSchema = z.object({
           .default([]),
       })
       .default({ categories: [], transactions: [], targets: [] }),
+    notes: z
+      .array(
+        z.object({
+          title: z.string().trim().min(1).max(120),
+          content: z.string().max(20000).default(""),
+          visibility: z.enum(["private", "shared"]).default("private"),
+        })
+      )
+      .max(2000)
+      .default([]),
     // Backup v1–2: rencana 5 pos tetap. Backup v3: daftar pos bebas.
     allocationPlan: z
       .object({
@@ -184,6 +194,7 @@ export async function POST(req: NextRequest) {
       categories: backup.workspace.finance.categories.length,
       transactions: backup.workspace.finance.transactions.length,
       targets: backup.workspace.finance.targets.length,
+      notes: backup.workspace.notes.length,
       allocationItems: backup.workspace.allocationItems.length > 0
         ? backup.workspace.allocationItems.length
         : backup.workspace.allocationPlan
@@ -361,6 +372,33 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Notes: restore jadi milik si pemilik sesi, visibilitas dipertahankan.
+    // Catatan identik (judul + isi) miliknya yang sudah ada dilewati.
+    let skippedNotes = 0;
+    for (const n of backup.workspace.notes) {
+      const dup = await db.note.findFirst({
+        where: {
+          workspaceId: wsId,
+          authorId: me,
+          title: n.title,
+          content: n.content,
+        },
+      });
+      if (dup) {
+        skippedNotes++;
+        continue;
+      }
+      await db.note.create({
+        data: {
+          workspaceId: wsId,
+          authorId: me,
+          title: n.title,
+          content: n.content,
+          visibility: n.visibility,
+        },
+      });
+    }
+
     // Alokasi: restore HANYA jika workspace belum punya pos sama sekali —
     // restore tidak pernah menimpa rencana yang sudah ada.
     const existingAlloc = await db.allocationItem.count({ where: { workspaceId: wsId } });
@@ -394,7 +432,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: "Pemulihan selesai — data ditambahkan, tidak ada yang dihapus.",
-      skipped: { logs: skippedLogs, transactions: skippedTx, targets: skippedTargets },
+      skipped: { logs: skippedLogs, transactions: skippedTx, targets: skippedTargets, notes: skippedNotes },
     });
   } catch {
     return NextResponse.json(

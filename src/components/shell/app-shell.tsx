@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Wallet,
   NotebookPen,
+  StickyNote,
   MessagesSquare,
   Settings,
   Leaf,
@@ -17,6 +18,7 @@ import { SettingsView } from "@/components/settings/settings-view";
 import { PlannerSection } from "@/components/sections/planner-section";
 import { FinanceSection } from "@/components/sections/finance-section";
 import { ReflectionSection } from "@/components/sections/reflection-section";
+import { NotesSection } from "@/components/sections/notes-section";
 import { ChatSection } from "@/components/sections/chat-section";
 import { OfflineBanner, InstallPromptCard } from "@/components/pwa/pwa-client";
 import { initials } from "@/lib/format";
@@ -31,6 +33,7 @@ const SECTIONS: {
   { id: "planner", label: "Perencana", icon: CalendarDays },
   { id: "finance", label: "Keuangan", icon: Wallet },
   { id: "reflection", label: "Refleksi", icon: NotebookPen },
+  { id: "notes", label: "Notes", icon: StickyNote },
   { id: "chat", label: "Pesan", icon: MessagesSquare },
   { id: "settings", label: "Pengaturan", icon: Settings },
 ];
@@ -197,6 +200,7 @@ export function AppShell({ session }: { session: SessionContext }) {
           {active === "planner" && <PlannerSection />}
           {active === "finance" && <FinanceSection />}
           {active === "reflection" && <ReflectionSection />}
+          {active === "notes" && <NotesSection />}
           {active === "chat" && <ChatSection />}
           {active === "settings" && <SettingsView session={session} />}
 
@@ -220,7 +224,7 @@ export function AppShell({ session }: { session: SessionContext }) {
           aria-label="Navigasi bawah"
           className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-[#0b0d12]/92 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
         >
-          <div className="grid grid-cols-6">
+          <div className="grid grid-cols-7">
             {SECTIONS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}

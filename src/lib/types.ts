@@ -15,5 +15,6 @@ export type SectionId =
   | "planner"
   | "finance"
   | "reflection"
+  | "notes"
   | "chat"
   | "settings";

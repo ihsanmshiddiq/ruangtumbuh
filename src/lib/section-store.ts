@@ -27,7 +27,8 @@ export const sectionStore = {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (
         saved === "today" || saved === "planner" || saved === "finance" ||
-        saved === "reflection" || saved === "chat" || saved === "settings"
+        saved === "reflection" || saved === "notes" || saved === "chat" ||
+        saved === "settings"
       ) {
         return saved;
       }

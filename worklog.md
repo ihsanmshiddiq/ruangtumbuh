@@ -195,3 +195,20 @@ Stage Summary:
 - Repo bersih untuk dipublikasikan: tanpa secret di working tree, file pribadi keluar dari tracking, riwayat lama berisi secret lama yang SUDAH dirotasi (tak valid) — jika suatu saat repo jadi publik, pertimbangkan history rewrite lebih dulu.
 - Keamanan default: bypass pratinjau tidak bisa aktif tanpa env eksplisit; RLS menolak penulisan atas nama orang lain; pesan tidak bisa diedit/dihapus via client.
 - Sengaja ditunda: verifikasi manual di Supabase (jalankan migration-001 di SQL Editor), Vercel env vars, ekspor otomatis terjadwal ke luar (dilarang fase ini).
+
+---
+Task ID: Fase-6 (Notes + Final QA + Release v1.0)
+
+Fitur Notes (catatan private/shared):
+- Skema: tabel `notes` (title ≤120, content ≤20000, visibility private|shared) — prisma/schema.prisma, supabase/schema.sql, supabase/migration-003-notes.sql (idempoten, RLS 4 policy: select milik-sendiri-atau-shared, insert sebagai-diri-sendiri, update/delete hanya milik sendiri).
+- Server: src/server/notes.ts (query ber-scope workspace, author selalu dari sesi); API /api/notes + /api/notes/[id].
+- UI: src/components/sections/notes-section.tsx (filter Semua/Private/Shared, drawer editor, empty/loading/error state, feedback toast); terdaftar di navigasi mobile & desktop (section "notes").
+- Backup: export memuat notes SESUAI visibilitas pembaca (private partner tidak pernah ikut); import tervalidasi, hanya menambah.
+- QA: scripts/smoke-fase6.mjs — 27/27 lolos dengan AUTH_BYPASS=0, mencakup 8 skenario otorisasi dua akun (private partner tersembunyi, shared terlihat, edit/hapus note orang lain ditolak, anonim 401, backup sesuai visibilitas, validasi input). Regression Fase 5: 25/25 tetap lolos. Data uji dibersihkan (cleanup-p5/p6).
+
+Release readiness:
+- Build produksi diperbaiki: `cp -r` (gagal di Windows) diganti scripts/copy-standalone.mjs cross-platform → `bun run build` sukses penuh termasuk packaging standalone.
+- README.md ditulis ulang publik-safe (tanpa data nyata; instruksi setup Supabase mengarah ke .env.example).
+- .env.example diverifikasi hanya berisi nama variabel (placeholder kosong).
+- PWA diverifikasi: service worker tidak pernah men-cache /api/* (data privat selalu lewat jaringan).
+- Catatan operasional: jalankan migration-001 (versi terbaru, dolar-quote $fase5$), migration-002, lalu migration-003 di Supabase.

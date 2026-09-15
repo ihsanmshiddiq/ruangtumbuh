@@ -32,6 +32,7 @@ export async function GET() {
     categories,
     transactions,
     financialTargets,
+    notes,
   ] = await Promise.all([
     db.workspace.findUnique({
       where: { id: wsId },
@@ -56,6 +57,12 @@ export async function GET() {
     db.transactionCategory.findMany({ where: { workspaceId: wsId }, orderBy: { name: "asc" } }),
     db.transaction.findMany({ where: { workspaceId: wsId }, orderBy: [{ date: "asc" }] }),
     db.financialTarget.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
+    // Notes: hanya yang BOLEH dibaca pengguna ini (miliknya + shared) —
+    // note private partner tidak pernah keluar dari database lewat backup.
+    db.note.findMany({
+      where: { workspaceId: wsId, OR: [{ authorId: ctx.user.id }, { visibility: "shared" }] },
+      orderBy: { updatedAt: "asc" },
+    }),
   ]);
 
   // Nama tampilan saja yang diekspor — email anggota lain tidak ikut.
@@ -157,6 +164,14 @@ export async function GET() {
           active: t.active,
         })),
       },
+      notes: notes.map((n) => ({
+        title: n.title,
+        content: n.content,
+        visibility: n.visibility,
+        author: person(n.authorId),
+        createdAt: n.createdAt,
+        updatedAt: n.updatedAt,
+      })),
     },
   };
 

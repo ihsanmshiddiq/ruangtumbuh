@@ -163,6 +163,25 @@ model Comment {
   @@index([workspaceId, entityType, entityId])
 }
 
+// Catatan pribadi/bersama. visibility:
+//   private = hanya penulis yang bisa lihat
+//   shared  = penulis + partner se-workspace
+// Keamanan ditegakkan di data layer (sandbox) & RLS (Supabase) — client
+// tidak pernah jadi batas keamanan.
+model Note {
+  id          String   @id @default(uuid())
+  workspaceId String
+  authorId    String
+  title       String
+  content     String
+  visibility  String   @default("private") // "private" | "shared"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, visibility])
+  @@index([authorId])
+}
+
 // ─── Chat pribadi (realtime) ─────────────────────────────────────────────
 
 model Message {

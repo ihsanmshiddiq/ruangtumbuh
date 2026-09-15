@@ -278,6 +278,26 @@ create table public.financial_targets (
 );
 create index financial_targets_workspace_id_idx on public.financial_targets (workspace_id);
 
+-- ── notes ─────────────────────────────────────────────────────────────────
+-- Catatan pribadi / dibagikan. visibility: 'private' | 'shared'.
+-- private  = hanya author.  shared = author + partner dalam workspace.
+-- Aturan akses ditegakkan RLS (lihat blok policy notes di bawah).
+create table public.notes (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  author_id    uuid not null references public.profiles (id) on delete cascade,
+  title        text not null check (length(btrim(title)) between 1 and 120),
+  content      text not null default '' check (length(content) <= 20000),
+  visibility   text not null default 'private'
+               check (visibility in ('private', 'shared')),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index notes_workspace_visibility_idx on public.notes (workspace_id, visibility);
+create index notes_author_idx on public.notes (author_id);
+
+create trigger notes_set_updated_at before update on public.notes for each row execute function public.set_updated_at();
+
 -- ─── 3. Trigger updated_at ────────────────────────────────────────────────
 -- Mirror perilaku @updatedAt Prisma: setiap UPDATE menyentuh updated_at.
 -- (messages dan workspace_members memang tidak punya updated_at di schema.)
@@ -384,6 +404,7 @@ alter table public.transaction_categories enable row level security;
 alter table public.transactions           enable row level security;
 alter table public.allocation_items       enable row level security;
 alter table public.financial_targets      enable row level security;
+alter table public.notes                  enable row level security;
 
 -- ─── 8. Kebijakan RLS ─────────────────────────────────────────────────────
 -- ── profiles ──
@@ -847,6 +868,45 @@ create policy "financial_targets_member_delete" on public.financial_targets
     where wm.workspace_id = financial_targets.workspace_id
       and wm.user_id = auth.uid()
   ));
+
+-- ── notes ──
+-- SELECT: milik sendiri ATAU shared dari sesama anggota workspace.
+create policy "notes_member_select" on public.notes
+  for select to authenticated
+  using (
+    author_id = auth.uid()
+    or (
+      visibility = 'shared'
+      and exists (
+        select 1 from public.workspace_members wm
+        where wm.workspace_id = notes.workspace_id
+          and wm.user_id = auth.uid()
+      )
+    )
+  );
+
+-- INSERT: hanya sebagai diri sendiri, di workspace yang diikuti.
+create policy "notes_author_insert" on public.notes
+  for insert to authenticated
+  with check (
+    author_id = auth.uid()
+    and exists (
+      select 1 from public.workspace_members wm
+      where wm.workspace_id = notes.workspace_id
+        and wm.user_id = auth.uid()
+    )
+  );
+
+-- UPDATE: hanya note milik sendiri; author_id tidak boleh berpindah.
+create policy "notes_author_update" on public.notes
+  for update to authenticated
+  using (author_id = auth.uid())
+  with check (author_id = auth.uid());
+
+-- DELETE: hanya note milik sendiri.
+create policy "notes_author_delete" on public.notes
+  for delete to authenticated
+  using (author_id = auth.uid());
 
 -- ─── 9. Opsional: Realtime untuk chat pribadi ─────────────────────────────
 -- Aktifkan bila ingin pesan chat baru masuk secara realtime:
