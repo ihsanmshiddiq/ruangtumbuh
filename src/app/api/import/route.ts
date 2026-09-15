@@ -24,9 +24,14 @@ const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal harus format YYYY-MM-DD.");
 
+const percentItem = z.object({
+  label: z.string().trim().min(1).max(40),
+  percent: z.number().int().min(0).max(100),
+});
+
 const backupSchema = z.object({
   app: z.literal("ruang-tumbuh"),
-  version: z.number().int().min(1).max(2),
+  version: z.number().int().min(1).max(3),
   workspace: z.object({
     activities: z
       .array(
@@ -121,6 +126,18 @@ const backupSchema = z.object({
           .default([]),
       })
       .default({ categories: [], transactions: [], targets: [] }),
+    // Backup v1–2: rencana 5 pos tetap. Backup v3: daftar pos bebas.
+    allocationPlan: z
+      .object({
+        needsPercent: z.number().int().min(0).max(100),
+        wantsPercent: z.number().int().min(0).max(100),
+        charityPercent: z.number().int().min(0).max(100),
+        savingsPercent: z.number().int().min(0).max(100),
+        targetPercent: z.number().int().min(0).max(100),
+      })
+      .nullable()
+      .default(null),
+    allocationItems: z.array(percentItem).max(12).default([]),
   }),
 });
 
@@ -167,6 +184,11 @@ export async function POST(req: NextRequest) {
       categories: backup.workspace.finance.categories.length,
       transactions: backup.workspace.finance.transactions.length,
       targets: backup.workspace.finance.targets.length,
+      allocationItems: backup.workspace.allocationItems.length > 0
+        ? backup.workspace.allocationItems.length
+        : backup.workspace.allocationPlan
+          ? 5
+          : 0,
     };
     const txTotal = backup.workspace.finance.transactions.reduce((s, t) => s + t.amount, 0);
     return NextResponse.json({
@@ -337,6 +359,36 @@ export async function POST(req: NextRequest) {
           active: t.active,
         },
       });
+    }
+
+    // Alokasi: restore HANYA jika workspace belum punya pos sama sekali —
+    // restore tidak pernah menimpa rencana yang sudah ada.
+    const existingAlloc = await db.allocationItem.count({ where: { workspaceId: wsId } });
+    if (existingAlloc === 0) {
+      const plan = backup.workspace.allocationPlan;
+      const items =
+        backup.workspace.allocationItems.length > 0
+          ? backup.workspace.allocationItems
+          : plan
+            ? [
+                { label: "Kebutuhan", percent: plan.needsPercent },
+                { label: "Keinginan", percent: plan.wantsPercent },
+                { label: "Sedekah", percent: plan.charityPercent },
+                { label: "Tabungan", percent: plan.savingsPercent },
+                { label: "Dana target", percent: plan.targetPercent },
+              ]
+            : [];
+      const total = items.reduce((s, i) => s + i.percent, 0);
+      if (items.length > 0 && total === 100) {
+        await db.allocationItem.createMany({
+          data: items.map((it, i) => ({
+            workspaceId: wsId,
+            label: it.label,
+            percent: it.percent,
+            position: i,
+          })),
+        });
+      }
     }
 
     return NextResponse.json({

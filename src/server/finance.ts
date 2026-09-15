@@ -240,60 +240,98 @@ export async function listMonthTransactions(ctx: Ctx, month: string): Promise<Tr
 
 /* ── Alokasi pemasukan (10/20/10/20/40) — sistem kedua, terpisah ─────── */
 
-export type AllocationPlanDTO = {
-  needsPercent: number; wantsPercent: number; charityPercent: number;
-  savingsPercent: number; targetPercent: number;
-};
+export type AllocationItemDTO = { id: string; label: string; percent: number };
 
-export async function getAllocationPlan(ctx: Ctx): Promise<AllocationPlanDTO> {
-  let row = await db.allocationPlan.findUnique({ where: { workspaceId: ctx.workspace.id } });
-  if (!row) {
-    row = await db.allocationPlan.create({ data: { workspaceId: ctx.workspace.id } });
+const DEFAULT_ALLOC: { label: string; percent: number }[] = [
+  { label: "Kebutuhan", percent: 10 },
+  { label: "Keinginan", percent: 20 },
+  { label: "Sedekah", percent: 10 },
+  { label: "Tabungan", percent: 20 },
+  { label: "Dana target", percent: 40 },
+];
+
+export const ALLOC_LIMITS = { min: 1, max: 12, labelMax: 40 };
+
+/** Daftar pos alokasi workspace; workspace baru otomatis diisi bawaan 10/20/10/20/40. */
+export async function getAllocationItems(ctx: Ctx): Promise<AllocationItemDTO[]> {
+  let rows = await db.allocationItem.findMany({
+    where: { workspaceId: ctx.workspace.id },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+  });
+  if (rows.length === 0) {
+    await db.allocationItem.createMany({
+      data: DEFAULT_ALLOC.map((d, i) => ({
+        workspaceId: ctx.workspace.id, label: d.label, percent: d.percent, position: i,
+      })),
+    });
+    rows = await db.allocationItem.findMany({
+      where: { workspaceId: ctx.workspace.id },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    });
   }
-  return {
-    needsPercent: row.needsPercent, wantsPercent: row.wantsPercent,
-    charityPercent: row.charityPercent, savingsPercent: row.savingsPercent,
-    targetPercent: row.targetPercent,
-  };
+  return rows.map((r) => ({ id: r.id, label: r.label, percent: r.percent }));
 }
 
-export async function updateAllocationPlan(ctx: Ctx, input: AllocationPlanDTO): Promise<{ ok: boolean; error?: string }> {
-  const total = input.needsPercent + input.wantsPercent + input.charityPercent + input.savingsPercent + input.targetPercent;
-  if (total !== 100) return { ok: false, error: `Total alokasi harus 100% (sekarang ${total}%).` };
-  for (const v of Object.values(input)) {
-    if (!Number.isInteger(v) || v < 0 || v > 100) return { ok: false, error: "Persentase harus bilangan bulat 0–100." };
+/**
+ * Simpan daftar pos alokasi (tambah/hapus/ganti nama/ubah persen).
+ * Strategi: ganti semua baris dalam satu transaksi — jumlah pos kecil,
+ * id baru dikembalikan ke client. Aturan: total WAJIB 100.
+ */
+export async function updateAllocationItems(
+  ctx: Ctx,
+  items: { label: string; percent: number }[],
+): Promise<{ ok: boolean; error?: string }> {
+  if (!Array.isArray(items) || items.length < ALLOC_LIMITS.min || items.length > ALLOC_LIMITS.max) {
+    return { ok: false, error: `Pos alokasi harus ${ALLOC_LIMITS.min}–${ALLOC_LIMITS.max} baris.` };
   }
-  await db.allocationPlan.upsert({
-    where: { workspaceId: ctx.workspace.id },
-    create: { workspaceId: ctx.workspace.id, ...input },
-    update: { ...input },
+  const seen = new Set<string>();
+  let total = 0;
+  for (const it of items) {
+    const label = typeof it.label === "string" ? it.label.trim() : "";
+    if (!label) return { ok: false, error: "Nama pos alokasi tidak boleh kosong." };
+    if (label.length > ALLOC_LIMITS.labelMax) return { ok: false, error: `Nama pos maksimal ${ALLOC_LIMITS.labelMax} karakter.` };
+    const key = label.toLowerCase();
+    if (seen.has(key)) return { ok: false, error: `Nama pos "${label}" kembar — pakai nama berbeda.` };
+    seen.add(key);
+    if (!Number.isInteger(it.percent) || it.percent < 0 || it.percent > 100) {
+      return { ok: false, error: `Persentase "${label}" harus bilangan bulat 0–100.` };
+    }
+    total += it.percent;
+  }
+  if (total !== 100) return { ok: false, error: `Total alokasi harus 100% (sekarang ${total}%).` };
+
+  await db.$transaction(async (tx) => {
+    await tx.allocationItem.deleteMany({ where: { workspaceId: ctx.workspace.id } });
+    await tx.allocationItem.createMany({
+      data: items.map((it, i) => ({
+        workspaceId: ctx.workspace.id,
+        label: it.label.trim(),
+        percent: it.percent,
+        position: i,
+      })),
+    });
   });
   return { ok: true };
 }
 
-/** Pembagian pemasukan bulan ini menurut rencana alokasi. */
+/** Pembagian pemasukan bulan ini menurut daftar pos alokasi. */
 export async function getAllocationForMonth(ctx: Ctx, month: string) {
-  const plan = await getAllocationPlan(ctx);
+  const items = await getAllocationItems(ctx);
   const { income } = await getMonthSummary(ctx, month);
-  const parts = [
-    { key: "needs", label: "Kebutuhan", percent: plan.needsPercent },
-    { key: "wants", label: "Keinginan", percent: plan.wantsPercent },
-    { key: "charity", label: "Sedekah", percent: plan.charityPercent },
-    { key: "savings", label: "Tabungan", percent: plan.savingsPercent },
-    { key: "target", label: "Dana target", percent: plan.targetPercent },
-  ] as const;
-  const items = parts.map((p) => ({
-    ...p,
-    amount: Math.floor((income * p.percent) / 100),
+  const parts = items.map((it) => ({
+    key: it.id,
+    label: it.label,
+    percent: it.percent,
+    amount: Math.floor((income * it.percent) / 100),
   }));
-  // sisa pembulatan masuk ke bucket terbesar agar total pas
-  const allocated = items.reduce((s, i) => s + i.amount, 0);
+  // sisa pembulatan masuk ke pos terbesar agar total pas
+  const allocated = parts.reduce((s, i) => s + i.amount, 0);
   const remainder = income - allocated;
-  if (remainder !== 0 && items.length > 0) {
-    const biggest = items.reduce((a, b) => (b.percent > a.percent ? b : a));
+  if (remainder !== 0 && parts.length > 0) {
+    const biggest = parts.reduce((a, b) => (b.percent > a.percent ? b : a));
     biggest.amount += remainder;
   }
-  return { plan, income, items };
+  return { items: parts, income };
 }
 
 /* ── Dana target ─────────────────────────────────────────────────────── */

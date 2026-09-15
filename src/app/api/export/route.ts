@@ -21,7 +21,7 @@ export async function GET() {
 
   const [
     workspace,
-    allocationPlan,
+    allocationItems,
     activities,
     activityLogs,
     weeklyPlanEntries,
@@ -42,7 +42,10 @@ export async function GET() {
         },
       },
     }),
-    db.allocationPlan.findUnique({ where: { workspaceId: wsId } }),
+    db.allocationItem.findMany({
+      where: { workspaceId: wsId },
+      orderBy: [{ position: "asc" as const }, { createdAt: "asc" as const }],
+    }),
     db.activity.findMany({ where: { workspaceId: wsId }, orderBy: { createdAt: "asc" } }),
     db.activityLog.findMany({ where: { workspaceId: wsId }, orderBy: [{ date: "asc" }] }),
     db.weeklyPlanEntry.findMany({ where: { workspaceId: wsId }, orderBy: [{ date: "asc" }] }),
@@ -62,7 +65,7 @@ export async function GET() {
 
   const payload = {
     app: "ruang-tumbuh",
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     exportedBy: ctx.user.displayName,
     workspace: {
@@ -72,15 +75,10 @@ export async function GET() {
         role: m.role,
         joinedAt: m.createdAt,
       })),
-      allocationPlan: allocationPlan
-        ? {
-            needsPercent: allocationPlan.needsPercent,
-            wantsPercent: allocationPlan.wantsPercent,
-            charityPercent: allocationPlan.charityPercent,
-            savingsPercent: allocationPlan.savingsPercent,
-            targetPercent: allocationPlan.targetPercent,
-          }
-        : null,
+      allocationItems: allocationItems.map((a) => ({
+        label: a.label,
+        percent: a.percent,
+      })),
       activities: activities.map((a) => ({
         name: a.name,
         description: a.description,

@@ -244,27 +244,25 @@ create table public.transactions (
 );
 create index transactions_workspace_date_idx on public.transactions (workspace_id, date);
 
--- ── allocation_plans ──────────────────────────────────────────────────────
--- Alokasi otomatis pemasukan. SATU baris per workspace (UNIQUE workspace_id).
--- Kelima persentase wajib berjumlah TEPAT 100 (constraint tingkat tabel).
--- Default 10/20/10/20/40.
+-- ── allocation_items ──────────────────────────────────────────────────────
+-- Alokasi otomatis pemasukan — POS BEBAS: anggota bisa tambah/hapus/ganti
+-- nama pos (maks 12), total persentase satu workspace wajib 100 (divalidasi
+-- di data layer; constraint lintas-baris tidak bisa dinyatakan di Postgres).
+-- Workspace baru otomatis diisi bawaan 10/20/10/20/40 oleh aplikasi.
 -- TERPISAH dari "lensa interpretasi 50/30/20" — lensa itu dihitung runtime
 -- dari bucket transaksi dan tidak butuh tabel.
-create table public.allocation_plans (
-  id              uuid primary key default gen_random_uuid(),
-  workspace_id    uuid not null unique references public.workspaces (id) on delete cascade,
-  needs_percent   integer not null default 10 check (needs_percent   >= 0),
-  wants_percent   integer not null default 20 check (wants_percent   >= 0),
-  charity_percent integer not null default 10 check (charity_percent >= 0),
-  savings_percent integer not null default 20 check (savings_percent >= 0),
-  target_percent  integer not null default 40 check (target_percent  >= 0),
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now(),
-  constraint allocation_plans_total_100 check (
-    needs_percent + wants_percent + charity_percent + savings_percent + target_percent = 100
-  )
+create table public.allocation_items (
+  id            uuid primary key default gen_random_uuid(),
+  workspace_id  uuid not null references public.workspaces (id) on delete cascade,
+  label         text not null check (length(btrim(label)) between 1 and 40),
+  percent       integer not null check (percent >= 0 and percent <= 100),
+  position      integer not null default 0,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
 );
--- UNIQUE(workspace_id) di atas sudah membuat index unik — tidak perlu index tambahan.
+create index allocation_items_workspace_idx on public.allocation_items (workspace_id);
+
+create trigger allocation_items_set_updated_at before update on public.allocation_items for each row execute function public.set_updated_at();
 
 -- ── financial_targets ─────────────────────────────────────────────────────
 -- Dana target (mis. dana liburan). target_amount > 0, current_amount >= 0.
@@ -303,7 +301,7 @@ create trigger weekly_reflections_set_updated_at  before update on public.weekly
 create trigger comments_set_updated_at            before update on public.comments            for each row execute function public.set_updated_at();
 create trigger transactions_set_updated_at        before update on public.transactions        for each row execute function public.set_updated_at();
 create trigger transaction_categories_set_updated_at before update on public.transaction_categories for each row execute function public.set_updated_at();
-create trigger allocation_plans_set_updated_at    before update on public.allocation_plans    for each row execute function public.set_updated_at();
+create trigger allocation_items_set_updated_at     before update on public.allocation_items     for each row execute function public.set_updated_at();
 create trigger financial_targets_set_updated_at   before update on public.financial_targets   for each row execute function public.set_updated_at();
 
 -- ─── 4. Trigger profil otomatis untuk user baru ───────────────────────────
@@ -384,7 +382,7 @@ alter table public.comments               enable row level security;
 alter table public.messages               enable row level security;
 alter table public.transaction_categories enable row level security;
 alter table public.transactions           enable row level security;
-alter table public.allocation_plans       enable row level security;
+alter table public.allocation_items       enable row level security;
 alter table public.financial_targets      enable row level security;
 
 -- ─── 8. Kebijakan RLS ─────────────────────────────────────────────────────
@@ -774,41 +772,41 @@ create policy "transactions_member_delete" on public.transactions
       and wm.user_id = auth.uid()
   ));
 
--- ── allocation_plans ──
-create policy "allocation_plans_member_select" on public.allocation_plans
+-- ── allocation_items ──
+create policy "allocation_items_member_select" on public.allocation_items
   for select to authenticated
   using (exists (
     select 1 from public.workspace_members wm
-    where wm.workspace_id = allocation_plans.workspace_id
+    where wm.workspace_id = allocation_items.workspace_id
       and wm.user_id = auth.uid()
   ));
 
-create policy "allocation_plans_member_insert" on public.allocation_plans
+create policy "allocation_items_member_insert" on public.allocation_items
   for insert to authenticated
   with check (exists (
     select 1 from public.workspace_members wm
-    where wm.workspace_id = allocation_plans.workspace_id
+    where wm.workspace_id = allocation_items.workspace_id
       and wm.user_id = auth.uid()
   ));
 
-create policy "allocation_plans_member_update" on public.allocation_plans
+create policy "allocation_items_member_update" on public.allocation_items
   for update to authenticated
   using (exists (
     select 1 from public.workspace_members wm
-    where wm.workspace_id = allocation_plans.workspace_id
+    where wm.workspace_id = allocation_items.workspace_id
       and wm.user_id = auth.uid()
   ))
   with check (exists (
     select 1 from public.workspace_members wm
-    where wm.workspace_id = allocation_plans.workspace_id
+    where wm.workspace_id = allocation_items.workspace_id
       and wm.user_id = auth.uid()
   ));
 
-create policy "allocation_plans_member_delete" on public.allocation_plans
+create policy "allocation_items_member_delete" on public.allocation_items
   for delete to authenticated
   using (exists (
     select 1 from public.workspace_members wm
-    where wm.workspace_id = allocation_plans.workspace_id
+    where wm.workspace_id = allocation_items.workspace_id
       and wm.user_id = auth.uid()
   ));
 

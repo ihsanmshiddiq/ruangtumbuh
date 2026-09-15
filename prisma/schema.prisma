@@ -206,8 +206,8 @@ model TransactionCategory {
   @@index([workspaceId])
 }
 
-// Alokasi otomatis pemasukan — WAJIB total 100%. Satu baris per workspace.
-// TERPISAH dari lensa interpretasi 50/30/20 (dihitung runtime dari bucket).
+// Alokasi otomatis pemasukan — VERSI LAMA (5 pos tetap). Tidak dipakai app
+// lagi; disimpan demi riwayat & rollback. Penerusnya: AllocationItem.
 model AllocationPlan {
   id             String   @id @default(uuid())
   workspaceId    String   @unique
@@ -218,6 +218,20 @@ model AllocationPlan {
   targetPercent  Int      @default(40)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+// Alokasi otomatis pemasukan — pos bebas (bisa tambah/hapus/ganti nama).
+// Aturan: total percent satu workspace = 100 (divalidasi di data layer).
+model AllocationItem {
+  id          String   @id @default(uuid())
+  workspaceId String
+  label       String
+  percent     Int
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
 }
 
 model FinancialTarget {

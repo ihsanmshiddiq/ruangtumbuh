@@ -55,7 +55,7 @@ console.log("── 3. Export backup penuh ──");
   const res = await fetch(BASE + "/api/export");
   check("export 200", res.status === 200);
   const backup = await res.json().catch(() => null);
-  check("version 2 + struktur lengkap", backup?.version === 2 && !!backup?.workspace, `v=${backup?.version}`);
+  check("version 2+ + struktur lengkap", (backup?.version ?? 0) >= 2 && !!backup?.workspace, `v=${backup?.version}`);
   check("punya semua koleksi", ["activities", "activityLogs", "energyLogs", "reflections", "messages", "finance"].every((k) => Array.isArray(backup?.workspace?.[k]) || k === "finance"), Object.keys(backup?.workspace ?? {}).join(","));
   check("pesan chat diekspor (person, bukan UUID)", backup?.workspace?.messages?.every((m) => typeof m.sender === "string" || m.sender === null) === true);
   check("tanpa credential/password/email", !JSON.stringify(backup).match(/passwordHash|SESSION_SECRET|service_role|@(?!example)/));

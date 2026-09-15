@@ -25,7 +25,6 @@ type FinancePayload = {
   transactions: TransactionDTO[];
   categories: CategoryDTO[];
   allocation: {
-    plan: { needsPercent: number; wantsPercent: number; charityPercent: number; savingsPercent: number; targetPercent: number };
     income: number;
     items: { key: string; label: string; percent: number; amount: number }[];
   };
@@ -261,7 +260,7 @@ export function FinanceSection() {
           <div className="space-y-2">
             {data.allocation.items.map((it) => (
               <div key={it.key} className="flex items-center gap-3">
-                <span className="w-24 sm:w-28 text-[0.8rem] text-muted-foreground shrink-0">{it.label}</span>
+                <span className="w-24 sm:w-28 text-[0.8rem] text-muted-foreground shrink-0 truncate" title={it.label}>{it.label}</span>
                 <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden" aria-hidden="true">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-rt-violet to-rt-teal"
@@ -274,7 +273,12 @@ export function FinanceSection() {
               </div>
             ))}
           </div>
-          {showAllocTools && <AllocationEditor plan={data.allocation.plan} onSaved={refetch} />}
+          {showAllocTools && (
+            <AllocationEditor
+              items={data.allocation.items.map((it) => ({ label: it.label, percent: it.percent }))}
+              onSaved={refetch}
+            />
+          )}
         </Panel>
       )}
 
@@ -586,71 +590,93 @@ function TargetManager({ onSaved }: { onSaved: () => Promise<void> }) {
   );
 }
 
-/* ── Editor alokasi pemasukan — persentase editable, wajib total 100% ── */
+/* ── Editor alokasi pemasukan — pos bebas: tambah, hapus, ubah nama & persen ── */
 
-const ALLOC_FIELDS: { key: keyof AllocPlan; label: string }[] = [
-  { key: "needsPercent", label: "Kebutuhan" },
-  { key: "wantsPercent", label: "Keinginan" },
-  { key: "charityPercent", label: "Sedekah" },
-  { key: "savingsPercent", label: "Tabungan" },
-  { key: "targetPercent", label: "Dana target" },
-];
+type AllocItem = { label: string; percent: number };
 
-type AllocPlan = {
-  needsPercent: number; wantsPercent: number; charityPercent: number;
-  savingsPercent: number; targetPercent: number;
-};
-
-function AllocationEditor({ plan, onSaved }: { plan: AllocPlan; onSaved: () => Promise<void> }) {
+function AllocationEditor({ items: initial, onSaved }: { items: AllocItem[]; onSaved: () => Promise<void> }) {
   const { toast } = useToast();
-  const [vals, setVals] = useState<AllocPlan>(plan);
+  const [items, setItems] = useState<AllocItem[]>(initial);
   const [saving, setSaving] = useState(false);
-  const total = ALLOC_FIELDS.reduce((s, f) => s + (Number(vals[f.key]) || 0), 0);
-  const dirty = ALLOC_FIELDS.some((f) => (Number(vals[f.key]) || 0) !== plan[f.key]);
+  const total = items.reduce((s, it) => s + (Number(it.percent) || 0), 0);
+  const dirty =
+    items.length !== initial.length ||
+    items.some((it, i) => it.label !== initial[i]?.label || (Number(it.percent) || 0) !== initial[i]?.percent);
+
+  const update = (i: number, patch: Partial<AllocItem>) =>
+    setItems((arr) => arr.map((it, j) => (j === i ? { ...it, ...patch } : it)));
+
+  async function save() {
+    setSaving(true);
+    try {
+      await apiFetch("/api/allocation", {
+        method: "PUT",
+        body: JSON.stringify({
+          items: items.map((it) => ({ label: it.label.trim(), percent: Number(it.percent) || 0 })),
+        }),
+      });
+      toast({ title: "Alokasi diperbarui" });
+      await onSaved();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menyimpan alokasi." });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="mt-4 pt-4 border-t border-border/60">
-      <p className="rt-kicker mb-3">atur pembagian pemasukan</p>
+      <p className="rt-kicker mb-3">atur pos alokasi — bebas tambah atau hapus</p>
       <div className="space-y-2">
-        {ALLOC_FIELDS.map((f) => (
-          <div key={f.key} className="flex items-center gap-3">
-            <Label htmlFor={`alloc-${f.key}`} className="w-24 sm:w-28 text-[0.8rem] text-muted-foreground shrink-0">
-              {f.label}
-            </Label>
+        {items.map((it, i) => (
+          <div key={i} className="flex items-center gap-2">
             <Input
-              id={`alloc-${f.key}`}
-              value={String(vals[f.key] ?? "")}
-              onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
-              inputMode="numeric"
-              className="h-11 w-20 text-center font-[family-name:var(--font-plex-mono)]"
-              aria-label={`Persentase ${f.label}`}
+              value={it.label}
+              onChange={(e) => update(i, { label: e.target.value.slice(0, 40) })}
+              placeholder={`Pos ${i + 1}`}
+              aria-label={`Nama pos ${i + 1}`}
+              className="h-11 flex-1"
+              maxLength={40}
             />
-            <span className="text-[0.8rem] text-muted-foreground">%</span>
+            <Input
+              value={String(it.percent ?? "")}
+              onChange={(e) => update(i, { percent: Number(e.target.value.replace(/\D/g, "").slice(0, 3)) || 0 })}
+              inputMode="numeric"
+              aria-label={`Persentase pos ${i + 1}`}
+              className="h-11 w-16 text-center font-[family-name:var(--font-plex-mono)]"
+            />
+            <span className="text-[0.8rem] text-muted-foreground shrink-0">%</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive"
+              aria-label={`Hapus pos ${it.label || i + 1}`}
+              disabled={items.length <= 1}
+              onClick={() => setItems((arr) => arr.filter((_, j) => j !== i))}
+            >
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
+            </Button>
           </div>
         ))}
       </div>
+      <Button
+        variant="outline"
+        className="w-full h-11 mt-2 border-dashed"
+        disabled={items.length >= 12}
+        onClick={() => setItems((arr) => [...arr, { label: "", percent: 0 }])}
+      >
+        <Plus className="w-4 h-4 mr-1.5" aria-hidden="true" />
+        Tambah pos
+      </Button>
       <div className="flex items-center justify-between mt-3">
         <p className={cn("rt-fine font-[family-name:var(--font-plex-mono)]", total === 100 ? "text-rt-good" : "text-destructive")}>
           total {total}% {total === 100 ? "✓" : "— harus tepat 100%"}
         </p>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" className="h-10" disabled={!dirty || saving} onClick={() => setVals(plan)}>
+          <Button variant="ghost" className="h-10" disabled={!dirty || saving} onClick={() => setItems(initial)}>
             Batal
           </Button>
-          <Button
-            className="h-10"
-            disabled={saving || !dirty || total !== 100}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await apiFetch("/api/allocation", { method: "PUT", body: JSON.stringify(vals) });
-                toast({ title: "Alokasi diperbarui" });
-                await onSaved();
-              } catch (e) {
-                toast({ title: e instanceof Error ? e.message : "Gagal menyimpan alokasi." });
-              } finally { setSaving(false); }
-            }}
-          >
+          <Button className="h-10" disabled={saving || !dirty || total !== 100 || items.some((it) => !it.label.trim())} onClick={save}>
             {saving && <TinySpinner />}
             Simpan
           </Button>

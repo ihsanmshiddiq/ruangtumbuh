@@ -21,7 +21,7 @@ begin
   if c is not null then
     execute format('alter table public.activity_logs drop constraint %I', c);
     execute 'alter table public.activity_logs add constraint activity_logs_status_check ' ||
-            $$check (status in ('planned', 'done', 'skipped', 'rescheduled', 'unavailable'))$$;
+            $fase5$check (status in ('planned', 'done', 'skipped', 'rescheduled', 'unavailable'))$fase5$;
   end if;
 
   -- weekly_plan_entries.status
@@ -35,7 +35,7 @@ begin
   if c is not null then
     execute format('alter table public.weekly_plan_entries drop constraint %I', c);
     execute 'alter table public.weekly_plan_entries add constraint weekly_plan_entries_status_check ' ||
-            $$check (status in ('planned', 'done', 'skipped', 'rescheduled', 'unavailable'))$$;
+            $fase5$check (status in ('planned', 'done', 'skipped', 'rescheduled', 'unavailable'))$fase5$;
   end if;
 end $$;
 
