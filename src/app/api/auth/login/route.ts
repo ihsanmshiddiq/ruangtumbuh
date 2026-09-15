@@ -34,12 +34,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ok = await login(parsed.data.email.trim().toLowerCase(), parsed.data.password);
-  if (!ok) {
-    return NextResponse.json(
-      { error: "Email atau kata sandi salah." },
-      { status: 401 }
-    );
+  try {
+    const ok = await login(parsed.data.email.trim().toLowerCase(), parsed.data.password);
+    if (!ok) {
+      return NextResponse.json({ error: "Gagal masuk. Coba lagi." }, { status: 401 });
+    }
+  } catch (err) {
+    // Pesan dari lib/auth sudah ramah & tidak membocorkan detail internal.
+    const message = err instanceof Error ? err.message : "Gagal masuk. Coba lagi.";
+    return NextResponse.json({ error: message }, { status: 401 });
   }
 
   resetRateLimit(key);
