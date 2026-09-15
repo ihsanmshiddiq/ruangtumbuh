@@ -26,12 +26,6 @@ export type SessionContext = {
 
 type DataClient = { user: SupabaseClient; service: ServiceSupabase | null };
 
-type MemberJoin = {
-  user_id: string;
-  role: string;
-  profiles: { display_name: string } | null;
-};
-
 type MembershipRow = {
   workspace_id: string;
   role: string;
@@ -80,16 +74,31 @@ async function buildContext(
     db.from("workspaces").select("id, name").eq("id", mem.workspace_id).maybeSingle(),
     db
       .from("workspace_members")
-      .select("user_id, role, profiles ( display_name )")
+      .select("user_id, role")
       .eq("workspace_id", mem.workspace_id)
       .order("created_at", { ascending: true }),
   ]);
-  const members = (membersRes.data ?? []) as unknown as MemberJoin[];
-  if (!wsRes.data || membersRes.error || members.length === 0) return null;
+  const memberRows = (membersRes.data ?? []) as unknown as { user_id: string; role: string }[];
+  if (!wsRes.data || membersRes.error || memberRows.length === 0) return null;
 
-  const mapped = members.map((m) => ({
+  // Nama profil diambil lewat query TERPISAH: workspace_members dan profiles
+  // tidak punya foreign key langsung (sama-sama menunjuk auth.users), jadi
+  // embed PostgREST "profiles ( display_name )" gagal dengan "Could not find
+  // a relationship ... in the schema cache" — penyebab login valid ditolak
+  // diam-diam. Policy RLS profiles mengizinkan baca profil rekan workspace.
+  const { data: profileRows } = await db
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", memberRows.map((m) => m.user_id));
+  const nameById = new Map(
+    ((profileRows ?? []) as unknown as { id: string; display_name: string }[]).map(
+      (p) => [p.id, p.display_name]
+    )
+  );
+
+  const mapped = memberRows.map((m) => ({
     id: m.user_id,
-    displayName: m.profiles?.display_name ?? "Anggota",
+    displayName: nameById.get(m.user_id) ?? "Anggota",
     role: m.role,
   }));
   const me = mapped.find((m) => m.id === userId);

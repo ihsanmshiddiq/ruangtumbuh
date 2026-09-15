@@ -5,7 +5,7 @@
 //  2) Alokasi pemasukan ber-pos bebas → pembagian setiap pemasukan (tabel items).
 import type { SessionContext } from "@/lib/types";
 import { monthStartOf } from "@/lib/dates";
-import { getSupabaseFor, unwrap } from "@/server/db";
+import { getSupabaseFor, unwrap, memberNameMap } from "@/server/db";
 
 type Ctx = SessionContext;
 
@@ -142,10 +142,7 @@ async function assertCategory(ctx: Ctx, id: string, type: "income" | "expense") 
 
 async function nameMap(ctx: Ctx): Promise<Map<string, string>> {
   const sb = await getSupabaseFor(ctx);
-  const members = unwrap(
-    await sb.from("workspace_members").select("user_id, profiles ( display_name )").eq("workspace_id", ctx.workspace.id)
-  ) as unknown as { user_id: string; profiles: { display_name: string } | null }[];
-  return new Map(members.map((m) => [m.user_id, m.profiles?.display_name ?? "Anggota"]));
+  return memberNameMap(sb, ctx.workspace.id);
 }
 
 export async function createTransaction(ctx: Ctx, input: TransactionInput): Promise<TransactionDTO> {
@@ -280,7 +277,7 @@ export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSum
 export async function listMonthTransactions(ctx: Ctx, month: string): Promise<TransactionDTO[]> {
   const { from, to } = monthRange(month);
   const sb = await getSupabaseFor(ctx);
-  const [rows, cats, members] = await Promise.all([
+  const [rows, cats] = await Promise.all([
     sb
       .from("transactions")
       .select(TX_SELECT)
@@ -290,17 +287,12 @@ export async function listMonthTransactions(ctx: Ctx, month: string): Promise<Tr
       .order("date", { ascending: false })
       .order("created_at", { ascending: false }),
     sb.from("transaction_categories").select(CAT_SELECT).eq("workspace_id", ctx.workspace.id),
-    sb.from("workspace_members").select("user_id, profiles ( display_name )").eq("workspace_id", ctx.workspace.id),
   ]);
   const txs = (unwrap(rows) ?? []) as unknown as TxRow[];
   const catById = new Map(
     ((unwrap(cats) ?? []) as unknown as CategoryRow[]).map((c) => [c.id, c])
   );
-  const nameById = new Map(
-    ((unwrap(members) ?? []) as unknown as { user_id: string; profiles: { display_name: string } | null }[]).map(
-      (m) => [m.user_id, m.profiles?.display_name ?? "Anggota"]
-    )
-  );
+  const nameById = await nameMap(ctx);
   return txs.map((r) => {
     const cat = catById.get(r.category_id);
     return {
