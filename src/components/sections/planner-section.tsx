@@ -214,8 +214,8 @@ export function PlannerSection({ session }: { session: SessionContext }) {
         {byDow[selectedDow].length === 0 ? (
           <EmptyState
             icon={CalendarDays}
-            title="Belum ada rencana untuk hari ini."
-            hint="Aktivitas dengan hari preferensi hari itu muncul otomatis. Aktivitas fleksibel bisa ditambahkan manual di bawah."
+            title="Hari ini masih kosong."
+            hint="Aktivitas yang biasanya ada di hari ini muncul otomatis — dan kalau hari ini memang sengaja kosong, itu juga sah-sah saja."
           />
         ) : (
           <div className="space-y-2.5">

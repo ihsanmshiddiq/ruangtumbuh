@@ -114,7 +114,7 @@ export function ChatSection() {
           <EmptyState
             icon={Send}
             title="Belum ada percakapan."
-            hint="Mulai obrolan kecil — koordinasi, kabar, atau hal yang tak butuh spreadsheet."
+            hint="Mulai dari kabar kecil saja — di sini tidak ada yang perlu formal."
           />
         )}
         {byDay.map(([day, list]) => (

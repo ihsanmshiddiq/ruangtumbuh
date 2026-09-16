@@ -35,9 +35,21 @@ const noopSubscribe = () => () => {};
 const getClientDate = () => tanggalIndo(toISODate(new Date()));
 const getServerDate = () => null;
 
+/** Sapaan sesuai waktu — pukul 03–10 pagi, 10–15 siang, 15–18 sore, sisanya malam. */
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h >= 3 && h < 11) return "Selamat pagi";
+  if (h >= 11 && h < 15) return "Selamat siang";
+  if (h >= 15 && h < 18) return "Selamat sore";
+  return "Selamat malam";
+}
+const getClientGreeting = () => `${greeting()}, `;
+const getServerGreeting = () => "";
+
 export function TodaySection({ session }: { session: SessionContext }) {
   const { toast } = useToast();
   const today = toISODate(new Date());
+  const sapa = useSyncExternalStore(noopSubscribe, () => getClientGreeting(), getServerGreeting);
   const hariLabel = useSyncExternalStore(noopSubscribe, getClientDate, getServerDate);
   const { data, error, loading, refetch } = useApi<DashboardPayload>(`/api/dashboard?date=${today}`);
 
@@ -89,11 +101,15 @@ export function TodaySection({ session }: { session: SessionContext }) {
     }
   }
 
+  const nextUp = hariIni
+    .filter((o) => o.status === "planned")
+    .sort((a, b) => (a.plannedStartTime ?? "99:99").localeCompare(b.plannedStartTime ?? "99:99"))[0];
+
   return (
     <section aria-label="Dashboard bersama" className="space-y-6">
       <SectionHeader
-        kicker="dashboard bersama"
-        title={hariLabel ?? "…"}
+        kicker={hariLabel ?? "dashboard bersama"}
+        title={sapa ? `${sapa}${session.user.displayName.split(" ")[0]}` : "Hari ini"}
         action={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-9" onClick={() => goToSection("planner")}>
@@ -123,7 +139,7 @@ export function TodaySection({ session }: { session: SessionContext }) {
             <Sunrise className="w-4 h-4 text-rt-teal/80" aria-hidden="true" />
             <p className="rt-kicker">rencana hari ini</p>
           </div>
-          <p className="rt-fine">{loading ? "memuat…" : `${hariIni.length} agenda berdua`}</p>
+          <p className="rt-fine">{loading ? "memuat…" : nextUp ? `berikutnya · ${nextUp.activityName}${nextUp.plannedStartTime ? ` ${nextUp.plannedStartTime.slice(0, 5)}` : ""}` : `${hariIni.length} agenda berdua`}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
