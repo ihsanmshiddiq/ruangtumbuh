@@ -29,6 +29,7 @@ type FinancePayload = {
     items: { key: string; label: string; percent: number; amount: number }[];
   };
   targets: TargetDTO[];
+  allTime: { income: number; expense: number; balance: number; txCount: number };
 };
 
 const TYPE_LABEL: Record<string, string> = { income: "masuk", expense: "keluar" };
@@ -207,22 +208,36 @@ export function FinanceSection() {
         </Panel>
       )}
 
-      {/* Ringkasan: pemasukan, pengeluaran, saldo */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3 order-6">
+      {/* Ringkasan: pemasukan, pengeluaran, saldo bulan + saldo total */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 order-6">
         {[
-          { icon: TrendingUp, label: "pemasukan", value: data?.summary.income, cls: "text-rt-good" },
-          { icon: TrendingDown, label: "pengeluaran", value: data?.summary.expense, cls: "text-destructive" },
-          { icon: Scale, label: "saldo", value: data?.summary.balance, cls: "text-rt-lilac" },
-        ].map(({ icon: Icon, label, value, cls }) => (
+          { icon: TrendingUp, label: "pemasukan", value: data?.summary.income, cls: "text-rt-good", sub: undefined as string | undefined },
+          { icon: TrendingDown, label: "pengeluaran", value: data?.summary.expense, cls: "text-destructive", sub: undefined },
+          { icon: Scale, label: "saldo bulan ini", value: data?.summary.balance, cls: "text-rt-lilac", sub: undefined },
+          {
+            icon: Wallet, label: "saldo total", value: data?.allTime.balance,
+            cls: (data?.allTime.balance ?? 0) < 0 ? "text-destructive" : "text-foreground",
+            sub: data ? `${data.allTime.txCount} transaksi sepanjang waktu` : undefined,
+          },
+        ].map(({ icon: Icon, label, value, cls, sub }) => (
           <Panel key={label} className="px-3 py-3 sm:p-4">
             <Icon className={cn("w-3.5 h-3.5 mb-1.5", cls)} aria-hidden="true" />
             <p className="rt-kicker text-[0.55rem]">{label}</p>
             <p className={cn("font-[family-name:var(--font-plex-mono)] font-semibold text-[0.95rem] sm:text-lg leading-tight mt-0.5", cls)}>
               {value === undefined ? "…" : rupiah(value)}
             </p>
+            {sub && <p className="rt-fine mt-1">{sub}</p>}
           </Panel>
         ))}
       </div>
+
+      {/* Grafik arus kas harian + donut "ke mana uang pergi" */}
+      {data && data.summary.txCount > 0 && (
+        <div className="grid lg:grid-cols-[1.45fr_1fr] gap-2 sm:gap-3 order-6">
+          <CashflowChart daily={data.summary.daily} month={month} />
+          <SpendingDonut byCategory={data.summary.byCategory} totalExpense={data.summary.expense} />
+        </div>
+      )}
 
       {/* Filter & cari */}
       <Panel className="py-3 order-7">
@@ -450,6 +465,11 @@ export function FinanceSection() {
 
       {/* Dana target */}
       <div className="order-5">
+        <MonthlyPlanTable
+          categories={data?.categories ?? []}
+          byCategory={data?.summary.byCategory ?? []}
+          month={month}
+        />
         <div className="flex items-center gap-2 mb-3">
           <Target className="w-4 h-4 text-rt-violet" aria-hidden="true" />
           <p className="rt-kicker">dana target</p>
@@ -875,6 +895,187 @@ const BUCKET_LABEL: Record<string, string> = {
   target: "Dana target",
   income: "Pemasukan",
 };
+
+/* ── Grafik arus kas harian — SVG ringan tanpa library, mengikuti gaya app ── */
+
+function CashflowChart({
+  daily,
+  month,
+}: {
+  daily: { date: string; income: number; expense: number }[];
+  month: string;
+}) {
+  const [y, m] = month.split("-").map(Number);
+  const days = new Date(y, m, 0).getDate();
+  const W = 720, H = 200, padL = 8, padR = 8, padT = 10, padB = 20;
+  const iw = W - padL - padR, ih = H - padT - padB;
+
+  const max = Math.max(1, ...daily.map((d) => Math.max(d.income, d.expense)));
+  const x = (day: number) => padL + ((day - 1) / Math.max(1, days - 1)) * iw;
+  const yv = (v: number) => padT + ih - (v / max) * ih;
+  const byDay = new Map(daily.map((d) => [Number(d.date.slice(8, 10)), d]));
+  const path = (key: "income" | "expense") =>
+    daily.length === 0
+      ? ""
+      : daily.map((d, i) => `${i ? "L" : "M"}${x(Number(d.date.slice(8, 10))).toFixed(1)} ${yv(d[key]).toFixed(1)}`).join(" ");
+
+  // Label sumbu: tanggal 1, tengah, akhir bulan.
+  const ticks = [1, Math.ceil(days / 2), days];
+
+  return (
+    <Panel className="px-4 py-4">
+      <p className="rt-kicker mb-0.5">arus kas harian</p>
+      <p className="rt-fine mb-3">Pemasukan dan pengeluaran bulan ini, hari demi hari.</p>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full h-auto"
+        role="img"
+        aria-label={`Grafik arus kas harian bulan ${month}`}
+        preserveAspectRatio="none"
+      >
+        {/* garis nol */}
+        <line x1={padL} y1={padT + ih} x2={W - padR} y2={padT + ih} className="stroke-border" strokeWidth="1" />
+        {daily.length > 0 && (
+          <>
+            <path d={path("income")} fill="none" className="stroke-rt-good" strokeWidth="1.8" vectorEffect="non-scaling-stroke" />
+            <path d={path("expense")} fill="none" className="stroke-destructive" strokeWidth="1.8" vectorEffect="non-scaling-stroke" />
+            {daily.map((d) => (
+              <g key={d.date}>
+                <circle cx={x(Number(d.date.slice(8, 10)))} cy={yv(d.income)} r="2.5" className="fill-background stroke-rt-good" strokeWidth="1.5" vectorEffect="non-scaling-stroke">
+                  <title>{`${d.date} · masuk ${rupiah(d.income)}`}</title>
+                </circle>
+                <circle cx={x(Number(d.date.slice(8, 10)))} cy={yv(d.expense)} r="2.5" className="fill-background stroke-destructive" strokeWidth="1.5" vectorEffect="non-scaling-stroke">
+                  <title>{`${d.date} · keluar ${rupiah(d.expense)}`}</title>
+                </circle>
+              </g>
+            ))}
+          </>
+        )}
+        {ticks.map((t) => (
+          <text key={t} x={x(t)} y={H - 4} textAnchor={t === 1 ? "start" : t === days ? "end" : "middle"} className="fill-muted-foreground" fontSize="10">
+            {t}
+          </text>
+        ))}
+      </svg>
+      <div className="flex items-center gap-4 mt-2">
+        <span className="rt-fine inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-rt-good" /> masuk
+        </span>
+        <span className="rt-fine inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-destructive" /> keluar
+        </span>
+        <span className="rt-fine ml-auto">puncak keluar {rupiah(Math.max(0, ...daily.map((d) => d.expense)))}</span>
+      </div>
+    </Panel>
+  );
+}
+
+/* ── Donut "ke mana uang pergi" — conic-gradient, tanpa library ── */
+
+const DONUT_COLORS = ["#8b7cff", "#40d7c0", "#b6a9ff", "#67d69a", "#e0b564", "#e08d8d", "#7ca6c9"];
+
+function SpendingDonut({
+  byCategory,
+  totalExpense,
+}: {
+  byCategory: MonthSummary["byCategory"];
+  totalExpense: number;
+}) {
+  const rows = byCategory.slice(0, 7);
+  const segments = rows.map((r, i) => {
+    const share = totalExpense > 0 ? (r.total / totalExpense) * 100 : 0;
+    const from = rows.slice(0, i).reduce((s, x) => s + (totalExpense > 0 ? (x.total / totalExpense) * 100 : 0), 0);
+    return { ...r, color: DONUT_COLORS[i % DONUT_COLORS.length], from, to: from + share };
+  });
+
+  return (
+    <Panel className="px-4 py-4">
+      <p className="rt-kicker mb-0.5">ke mana uang pergi</p>
+      <p className="rt-fine mb-3">Rincian pengeluaran per kategori.</p>
+      {rows.length === 0 ? (
+        <p className="rt-fine py-8 text-center">Belum ada pengeluaran bulan ini.</p>
+      ) : (
+        <div className="flex flex-col xs:flex-row items-center gap-4">
+          <div
+            role="img"
+            aria-label="Donut rincian pengeluaran per kategori"
+            className="relative w-32 h-32 sm:w-36 sm:h-36 rounded-full shrink-0"
+            style={{ background: `conic-gradient(${segments.map((s) => `${s.color} ${s.from}% ${s.to}%`).join(", ")})` }}
+          >
+            <div className="absolute inset-[22%] rounded-full bg-rt-panel grid place-items-center text-center">
+              <div>
+                <p className="font-[family-name:var(--font-plex-mono)] text-[0.72rem] font-semibold leading-tight">{rupiah(totalExpense)}</p>
+                <p className="rt-kicker text-[0.5rem]">keluar</p>
+              </div>
+            </div>
+          </div>
+          <ul className="w-full min-w-0 space-y-1.5">
+            {segments.map((s) => (
+              <li key={s.categoryId} className="flex items-center gap-2 text-[0.78rem]">
+                <span aria-hidden="true" className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: s.color }} />
+                <span className="truncate min-w-0 flex-1">{s.name}</span>
+                <span className="font-[family-name:var(--font-plex-mono)] text-muted-foreground shrink-0">
+                  {totalExpense > 0 ? Math.round((s.total / totalExpense) * 100) : 0}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* ── Tabel rencana bulanan — target vs realisasi kategori yang punya target ── */
+
+function MonthlyPlanTable({
+  categories,
+  byCategory,
+  month,
+}: {
+  categories: CategoryDTO[];
+  byCategory: MonthSummary["byCategory"];
+  month: string;
+}) {
+  const rows = categories
+    .filter((c) => c.type === "expense" && c.monthlyTarget > 0)
+    .map((c) => {
+      const actual = byCategory.find((b) => b.categoryId === c.id)?.total ?? 0;
+      const pct = c.monthlyTarget > 0 ? Math.min(999, Math.round((actual / c.monthlyTarget) * 100)) : 0;
+      return { ...c, actual, pct };
+    })
+    .sort((a, b) => b.pct - a.pct);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <Panel className="order-4 px-4 py-4">
+      <p className="rt-kicker mb-0.5">rencana bulanan</p>
+      <p className="rt-fine mb-4">
+        Target per kategori untuk {monthLabel(month).toLowerCase()} — atur angkanya di kelola kategori.
+      </p>
+      <div className="space-y-2.5">
+        {rows.map((r) => (
+          <div key={r.id}>
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[0.82rem] font-medium truncate">{r.name}</p>
+              <p className="font-[family-name:var(--font-plex-mono)] text-[0.75rem] shrink-0">
+                {rupiah(r.actual)}
+                <span className="text-muted-foreground"> / {rupiah(r.monthlyTarget)}</span>
+              </p>
+            </div>
+            <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.05] overflow-hidden" aria-hidden="true">
+              <div
+                className={cn("h-full rounded-full transition-all", r.pct > 100 ? "bg-destructive" : "bg-rt-teal")}
+                style={{ width: `${Math.min(100, r.pct)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
 
 function CategoryManager({
   categories,

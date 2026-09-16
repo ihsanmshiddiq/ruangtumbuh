@@ -300,6 +300,8 @@ export type MonthSummary = {
   balance: number;
   byBucket: Record<Bucket, number>; // pengeluaran per bucket (lensa 50/30/20)
   byCategory: { categoryId: string; name: string; bucket: string; type: string; total: number }[];
+  /** Arus kas per tanggal "YYYY-MM-DD" (hanya hari yang punya transaksi) — untuk grafik. */
+  daily: { date: string; income: number; expense: number }[];
   txCount: number;
 };
 
@@ -325,10 +327,18 @@ export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSum
   let income = 0, expense = 0;
   const byBucket: Record<Bucket, number> = { needs: 0, wants: 0, charity: 0, savings: 0, target: 0 };
   const catTotals = new Map<string, number>();
+  const dayMap = new Map<string, { income: number; expense: number }>();
   for (const t of rows) {
-    if (t.type === "income") income += t.amount;
-    else {
+    if (t.type === "income") {
+      income += t.amount;
+      const d = dayMap.get(t.date) ?? { income: 0, expense: 0 };
+      d.income += t.amount;
+      dayMap.set(t.date, d);
+    } else {
       expense += t.amount;
+      const d = dayMap.get(t.date) ?? { income: 0, expense: 0 };
+      d.expense += t.amount;
+      dayMap.set(t.date, d);
       const c = catById.get(t.category_id);
       if (c && (BUCKETS as readonly string[]).includes(c.bucket)) {
         byBucket[c.bucket as Bucket] += t.amount;
@@ -346,7 +356,26 @@ export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSum
     }))
     .sort((a, b) => b.total - a.total);
 
-  return { month, income, expense, balance: income - expense, byBucket, byCategory, txCount: rows.length };
+  const daily = [...dayMap.entries()]
+    .map(([date, v]) => ({ date, ...v }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return { month, income, expense, balance: income - expense, byBucket, byCategory, daily, txCount: rows.length };
+}
+
+/** Saldo kumulatif sepanjang waktu (semua masuk − semua keluar) milik pengguna aktif. */
+export async function getAllTimeTotals(ctx: Ctx): Promise<{ income: number; expense: number; balance: number; txCount: number }> {
+  const sb = await getSupabaseFor(ctx);
+  // Supabase tidak melakukan agregat di sisi klien — ambil kolom minimal saja.
+  const rows = (unwrap(
+    await sb.from("transactions").select("type, amount").eq("workspace_id", ctx.workspace.id).eq("created_by", ctx.user.id)
+  ) ?? []) as unknown as { type: string; amount: number }[];
+  let income = 0, expense = 0;
+  for (const t of rows) {
+    if (t.type === "income") income += t.amount;
+    else expense += t.amount;
+  }
+  return { income, expense, balance: income - expense, txCount: rows.length };
 }
 
 /** Daftar transaksi pribadi sebulan (urut tanggal terbaru) — batch, tanpa N+1. */
