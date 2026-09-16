@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import {
-  Sunrise,
+  LayoutDashboard,
   CalendarDays,
   Wallet,
   NotebookPen,
@@ -30,7 +30,7 @@ const SECTIONS: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { id: "today", label: "Hari Ini", icon: Sunrise },
+  { id: "today", label: "Dashboard", icon: LayoutDashboard },
   { id: "planner", label: "Perencana", icon: CalendarDays },
   { id: "finance", label: "Keuangan", icon: Wallet },
   { id: "reflection", label: "Refleksi", icon: NotebookPen },
