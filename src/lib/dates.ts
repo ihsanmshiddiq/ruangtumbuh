@@ -98,5 +98,5 @@ export function isHHMM(v: unknown): v is string {
 
 /** Validasi YYYY-MM-DD untuk input server. */
 export function isISODate(v: unknown): v is string {
-  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(parseISODate(v).getTime());
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && toISODate(parseISODate(v)) === v;
 }

@@ -22,12 +22,16 @@ export async function GET(req: NextRequest) {
       month: req.nextUrl.searchParams.get("month") ?? undefined,
     });
     const month = parsed.month ?? monthKey(new Date());
-    const [summary, transactions, categories, allocation, targets] = await Promise.all([
+    // Kategori dipakai ulang untuk daftar transaksi; income dipakai ulang untuk
+    // alokasi. Ini menghindari query ringkasan/kategori yang sebelumnya dobel.
+    const [summary, categories, targets] = await Promise.all([
       getMonthSummary(ctx, month),
-      listMonthTransactions(ctx, month),
       listCategories(ctx),
-      getAllocationForMonth(ctx, month),
       listTargets(ctx),
+    ]);
+    const [transactions, allocation] = await Promise.all([
+      listMonthTransactions(ctx, month, categories),
+      getAllocationForMonth(ctx, month, summary.income),
     ]);
     return { month, summary, transactions, categories, allocation, targets };
   });

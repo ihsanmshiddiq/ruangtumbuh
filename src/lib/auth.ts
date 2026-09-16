@@ -168,12 +168,12 @@ export async function login(email: string, password: string): Promise<boolean> {
   if (!supabaseEnv()) throw new Error("Konfigurasi server belum lengkap. Hubungi pemilik aplikasi.");
   const supabase = await createServerSupabase();
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(friendlyAuthError((error as { code?: string }).code, error.message));
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // signInWithPassword sudah mengembalikan user tervalidasi. Memakainya di
+  // sini menghindari satu round-trip auth tambahan sebelum redirect dashboard.
+  const user = data.user;
   if (user) {
     const { data: memberships } = await supabase
       .from("workspace_members")

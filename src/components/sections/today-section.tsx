@@ -3,7 +3,7 @@
 // TODAY — halaman utama yang menjawab: "Hari ini saya perlu melakukan apa?"
 // Di atas lipungan: tanggal, energi, agenda hari ini. Tanpa dashboard statistik.
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { Sunrise, Sparkles, CalendarDays, CloudOff } from "lucide-react";
+import { Sunrise, Sparkles, CalendarDays, CloudOff, Wallet, StickyNote, MessagesSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { OccurrenceCard } from "@/components/planner/occurrence-card";
@@ -37,6 +37,8 @@ export function TodaySection() {
     [data, today]
   );
   const energyToday = data?.energy.find((e) => e.date === today)?.level ?? null;
+  const selesai = hariIni.filter((o) => o.status === "done").length;
+  const tersisa = hariIni.filter((o) => o.status === "planned").length;
 
   async function setStatus(occ: OccurrenceDTO, status: "done" | "skipped" | "planned") {
     setBusyId(occ.id);
@@ -108,6 +110,38 @@ export function TodaySection() {
           </p>
         </Panel>
       )}
+
+      <Panel>
+        <div className="flex items-center gap-2 mb-3">
+          <Sunrise className="w-4 h-4 text-rt-teal/80" aria-hidden="true" />
+          <p className="rt-kicker">ringkasan hari ini</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "agenda", value: hariIni.length },
+            { label: "selesai", value: selesai },
+            { label: "tersisa", value: tersisa },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border border-border/70 bg-white/[0.02] px-3 py-2.5">
+              <p className="rt-kicker text-[0.55rem]">{item.label}</p>
+              <p className="mt-1 font-[family-name:var(--font-plex-mono)] text-lg font-semibold">{loading ? "…" : item.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3" aria-label="Aksi cepat">
+          {[
+            { id: "finance" as const, label: "Catat transaksi", icon: Wallet },
+            { id: "planner" as const, label: "Atur rencana", icon: CalendarDays },
+            { id: "notes" as const, label: "Tulis catatan", icon: StickyNote },
+            { id: "chat" as const, label: "Kirim pesan", icon: MessagesSquare },
+          ].map(({ id, label, icon: Icon }) => (
+            <Button key={id} variant="outline" size="sm" className="h-9" onClick={() => goToSection(id)}>
+              <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+              {label}
+            </Button>
+          ))}
+        </div>
+      </Panel>
 
       {/* Energi — konteks, bukan nilai */}
       <Panel>

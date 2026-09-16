@@ -8,7 +8,7 @@ import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState, Panel, TinySpinner } from "@/components/shared/ui-bits";
-import { useApi, apiFetch } from "@/lib/client";
+import { apiFetch } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import type { MessageDTO } from "@/server/chat";
 
@@ -22,9 +22,6 @@ export function ChatSection() {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const lastIsoRef = useRef<string | null>(null);
-
-  // Muat awal
-  const { refetch } = useApi<MessagesPayload>("/api/messages");
 
   useEffect(() => {
     void (async () => {

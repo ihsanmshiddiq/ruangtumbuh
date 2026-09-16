@@ -204,6 +204,22 @@ export async function deleteTransaction(ctx: Ctx, id: string): Promise<boolean> 
   return rows.length > 0;
 }
 
+/** Hapus semua transaksi workspace dalam rentang tanggal inklusif. */
+export async function deleteTransactionsInRange(ctx: Ctx, from: string, to: string): Promise<number> {
+  if (from > to) throw new Error("Tanggal awal harus sebelum atau sama dengan tanggal akhir.");
+  const sb = await getSupabaseFor(ctx);
+  const rows = unwrap(
+    await sb
+      .from("transactions")
+      .delete()
+      .eq("workspace_id", ctx.workspace.id)
+      .gte("date", from)
+      .lte("date", to)
+      .select("id")
+  ) as { id: string }[];
+  return rows.length;
+}
+
 export async function getTransaction(ctx: Ctx, id: string): Promise<TransactionDTO | null> {
   const sb = await getSupabaseFor(ctx);
   const rows = unwrap(
@@ -274,10 +290,14 @@ export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSum
 }
 
 /** Daftar transaksi sebulan (urut tanggal terbaru) — batch, tanpa N+1. */
-export async function listMonthTransactions(ctx: Ctx, month: string): Promise<TransactionDTO[]> {
+export async function listMonthTransactions(
+  ctx: Ctx,
+  month: string,
+  categories?: CategoryDTO[]
+): Promise<TransactionDTO[]> {
   const { from, to } = monthRange(month);
   const sb = await getSupabaseFor(ctx);
-  const [rows, cats] = await Promise.all([
+  const [rows, names] = await Promise.all([
     sb
       .from("transactions")
       .select(TX_SELECT)
@@ -286,13 +306,13 @@ export async function listMonthTransactions(ctx: Ctx, month: string): Promise<Tr
       .lte("date", to)
       .order("date", { ascending: false })
       .order("created_at", { ascending: false }),
-    sb.from("transaction_categories").select(CAT_SELECT).eq("workspace_id", ctx.workspace.id),
+    nameMap(ctx),
   ]);
   const txs = (unwrap(rows) ?? []) as unknown as TxRow[];
+  const cats = categories ?? await listCategories(ctx);
   const catById = new Map(
-    ((unwrap(cats) ?? []) as unknown as CategoryRow[]).map((c) => [c.id, c])
+    cats.map((c) => [c.id, c])
   );
-  const nameById = await nameMap(ctx);
   return txs.map((r) => {
     const cat = catById.get(r.category_id);
     return {
@@ -304,7 +324,7 @@ export async function listMonthTransactions(ctx: Ctx, month: string): Promise<Tr
       bucket: cat?.bucket ?? "needs",
       note: r.note,
       createdBy: r.created_by,
-      createdByName: nameById.get(r.created_by) ?? "Anggota",
+      createdByName: names.get(r.created_by) ?? "Anggota",
     };
   });
 }
@@ -405,9 +425,9 @@ export async function updateAllocationItems(
 }
 
 /** Pembagian pemasukan bulan ini menurut daftar pos alokasi. */
-export async function getAllocationForMonth(ctx: Ctx, month: string) {
+export async function getAllocationForMonth(ctx: Ctx, month: string, knownIncome?: number) {
   const items = await getAllocationItems(ctx);
-  const { income } = await getMonthSummary(ctx, month);
+  const income = knownIncome ?? (await getMonthSummary(ctx, month)).income;
   const parts = items.map((it) => ({
     key: it.id,
     label: it.label,

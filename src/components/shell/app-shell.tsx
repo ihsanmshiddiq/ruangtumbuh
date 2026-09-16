@@ -22,6 +22,7 @@ import { NotesSection } from "@/components/sections/notes-section";
 import { ChatSection } from "@/components/sections/chat-section";
 import { OfflineBanner, InstallPromptCard } from "@/components/pwa/pwa-client";
 import { initials } from "@/lib/format";
+import { sectionStore } from "@/lib/section-store";
 import { cn } from "@/lib/utils";
 
 const SECTIONS: {
@@ -37,40 +38,6 @@ const SECTIONS: {
   { id: "chat", label: "Pesan", icon: MessagesSquare },
   { id: "settings", label: "Pengaturan", icon: Settings },
 ];
-
-const STORAGE_KEY = "rt_active_section";
-
-// Store mini untuk bagian aktif — terbaca dari localStorage tanpa cascading
-// render dan tanpa mismatch hidrasi (server snapshot = "today").
-let sectionListeners: (() => void)[] = [];
-const sectionStore = {
-  subscribe(listener: () => void) {
-    sectionListeners.push(listener);
-    return () => {
-      sectionListeners = sectionListeners.filter((l) => l !== listener);
-    };
-  },
-  getSnapshot(): SectionId {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved && SECTIONS.some((s) => s.id === saved)) return saved as SectionId;
-    } catch {
-      // abaikan — mode privat dsb.
-    }
-    return "today";
-  },
-  getServerSnapshot(): SectionId {
-    return "today";
-  },
-  set(id: SectionId) {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, id);
-    } catch {
-      // abaikan
-    }
-    sectionListeners.forEach((l) => l());
-  },
-};
 
 export function AppShell({ session }: { session: SessionContext }) {
   const active = useSyncExternalStore(

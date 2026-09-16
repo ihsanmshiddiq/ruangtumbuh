@@ -4,7 +4,7 @@
 // Prioritas Fase 3: tambah transaksi 1 tangan (jenis → nominal → kategori →
 // tanggal → catatan), ringkasan jelas, alokasi ≠ lensa 50/30/20 (dijelaskan).
 import { useMemo, useState } from "react";
-import { Plus, Search, Wallet, ArrowDownLeft, ArrowUpRight, Target, TrendingUp, TrendingDown, Scale, ChevronLeft, ChevronRight, PlusCircle, Trash2 } from "lucide-react";
+import { Plus, Search, Wallet, ArrowDownLeft, ArrowUpRight, Target, TrendingUp, TrendingDown, Scale, ChevronLeft, ChevronRight, PlusCircle, Trash2, CalendarRange } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,10 @@ export function FinanceSection() {
   const [editTx, setEditTx] = useState<TransactionDTO | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [deletingRange, setDeletingRange] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showAllocTools, setShowAllocTools] = useState(false);
 
@@ -55,6 +59,46 @@ export function FinanceSection() {
   }, [data, search, typeFilter]);
 
   const thisMonth = monthKey(new Date());
+  const rangeMatches = useMemo(() => {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return [];
+    return (data?.transactions ?? []).filter((t) => t.date >= rangeFrom && t.date <= rangeTo);
+  }, [data, rangeFrom, rangeTo]);
+
+  function openRangeDelete() {
+    const [year, monthNumber] = month.split("-").map(Number);
+    setRangeFrom(`${month}-01`);
+    setRangeTo(`${month}-${String(new Date(year, monthNumber, 0).getDate()).padStart(2, "0")}`);
+    setRangeOpen(true);
+  }
+
+  async function deleteRange() {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) {
+      toast({ title: "Pilih rentang tanggal yang valid." });
+      return;
+    }
+    if (rangeMatches.length === 0) {
+      toast({ title: "Tidak ada transaksi pada rentang ini." });
+      return;
+    }
+    const confirmed = window.confirm(
+      `Hapus ${rangeMatches.length} transaksi dari ${rangeFrom} sampai ${rangeTo}? Tindakan ini tidak dapat dibatalkan.`
+    );
+    if (!confirmed) return;
+    setDeletingRange(true);
+    try {
+      const result = await apiFetch<{ deleted: number }>(
+        `/api/transactions?from=${encodeURIComponent(rangeFrom)}&to=${encodeURIComponent(rangeTo)}`,
+        { method: "DELETE" }
+      );
+      setRangeOpen(false);
+      toast({ title: `${result.deleted} transaksi dihapus` });
+      await refetch();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menghapus transaksi." });
+    } finally {
+      setDeletingRange(false);
+    }
+  }
 
   async function afterSave(msg: string) {
     setFormOpen(false);
@@ -173,7 +217,43 @@ export function FinanceSection() {
 
       {/* Daftar transaksi — kartu responsif, nominal menonjol, masuk/keluar berlabel */}
       <div>
-        <p className="rt-kicker mb-3">transaksi ({filtered.length})</p>
+        <div className="flex items-center gap-2 mb-3">
+          <p className="rt-kicker">transaksi ({filtered.length})</p>
+          <button
+            type="button"
+            onClick={openRangeDelete}
+            className="ml-auto min-h-9 px-2 text-[0.65rem] font-medium text-muted-foreground hover:text-destructive"
+          >
+            <CalendarRange className="inline-block w-3.5 h-3.5 mr-1" aria-hidden="true" />
+            hapus rentang
+          </button>
+        </div>
+        {rangeOpen && (
+          <Panel className="mb-3 border-destructive/30">
+            <p className="rt-kicker text-destructive">hapus beberapa transaksi</p>
+            <p className="rt-fine mt-1">Hanya transaksi di rentang ini yang akan dihapus. Periksa jumlahnya sebelum mengonfirmasi.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+              <div>
+                <Label htmlFor="range-from" className="rt-kicker">dari</Label>
+                <Input id="range-from" type="date" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} className="mt-1 h-11" />
+              </div>
+              <div>
+                <Label htmlFor="range-to" className="rt-kicker">sampai</Label>
+                <Input id="range-to" type="date" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} className="mt-1 h-11" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 mt-3">
+              <p className="rt-fine">{rangeMatches.length} transaksi akan dihapus</p>
+              <div className="flex gap-2">
+                <Button variant="ghost" className="h-10" disabled={deletingRange} onClick={() => setRangeOpen(false)}>Batal</Button>
+                <Button variant="outline" className="h-10 text-destructive border-destructive/30 hover:text-destructive" disabled={deletingRange || rangeMatches.length === 0 || rangeFrom > rangeTo} onClick={deleteRange}>
+                  {deletingRange && <TinySpinner />}
+                  Hapus semua
+                </Button>
+              </div>
+            </div>
+          </Panel>
+        )}
         {loading && filtered.length === 0 ? (
           <Panel className="text-center py-8">
             <TinySpinner className="mx-auto" />
