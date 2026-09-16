@@ -156,6 +156,7 @@ export async function updateActivity(
       .update(data)
       .eq("id", id)
       .eq("workspace_id", ctx.workspace.id)
+      .eq("created_by", ctx.user.id)
       .select(ACTIVITY_SELECT)
   ) as ActivityRow[];
   const row = rows[0];
@@ -300,11 +301,13 @@ export async function ensureOccurrence(ctx: Ctx, input: EnsurePlanInput): Promis
 
   const { data: activity } = await sb
     .from("activities")
-    .select("id")
+    .select("id, created_by")
     .eq("id", input.activityId)
     .eq("workspace_id", ctx.workspace.id)
     .maybeSingle();
-  if (!activity) throw new Error("Aktivitas tidak ditemukan");
+  if (!activity || (activity as { created_by: string }).created_by !== ctx.user.id) {
+    throw new Error("Aktivitas bukan milikmu.");
+  }
 
   // activity_logs: update baris yang ada, atau insert baru (semantik upsert).
   const updateLog: Record<string, unknown> = {};
@@ -487,7 +490,7 @@ export async function setEnergy(ctx: Ctx, date: string, level: number): Promise<
 export async function ensureWeekPlanned(ctx: Ctx, weekStart: string): Promise<void> {
   const ws = weekStartOf(weekStart);
   const dates = weekDates(ws);
-  const activities = await listActivities(ctx);
+  const activities = (await listActivities(ctx)).filter((activity) => activity.createdBy === ctx.user.id);
   const sb = await getSupabaseFor(ctx);
   const existing = (unwrap(
     await sb

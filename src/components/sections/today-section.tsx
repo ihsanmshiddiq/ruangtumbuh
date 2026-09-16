@@ -15,12 +15,13 @@ import { goToSection } from "@/lib/section-store";
 import { tanggalIndo, toISODate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { WeekView, OccurrenceDTO } from "@/server/planner";
+import type { SessionContext } from "@/lib/types";
 
 const noopSubscribe = () => () => {};
 const getClientDate = () => tanggalIndo(toISODate(new Date()));
 const getServerDate = () => null;
 
-export function TodaySection() {
+export function TodaySection({ session }: { session: SessionContext }) {
   const { toast } = useToast();
   const today = toISODate(new Date());
   // Tanggal perangkat tanpa mismatch hidrasi (pola Fase 1).
@@ -211,6 +212,7 @@ export function TodaySection() {
                 onSkip={() => setStatus(occ, "skipped")}
                 onReschedule={() => setResched(occ)}
                 onUnavailable={() => setUnavail(occ)}
+                canManage={occ.userId === session.user.id}
               />
             ))}
           </div>

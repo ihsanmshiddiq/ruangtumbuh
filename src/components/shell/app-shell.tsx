@@ -163,9 +163,9 @@ export function AppShell({ session }: { session: SessionContext }) {
           id="konten-utama"
           className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-5 sm:pt-8 space-y-6 pb-[calc(4.6rem+env(safe-area-inset-bottom))] lg:pb-10 lg:space-y-0 lg:py-8"
         >
-          {active === "today" && <TodaySection />}
-          {active === "planner" && <PlannerSection />}
-          {active === "finance" && <FinanceSection />}
+          {active === "today" && <TodaySection session={session} />}
+          {active === "planner" && <PlannerSection session={session} />}
+          {active === "finance" && <FinanceSection session={session} />}
           {active === "reflection" && <ReflectionSection />}
           {active === "notes" && <NotesSection />}
           {active === "chat" && <ChatSection />}

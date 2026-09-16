@@ -186,6 +186,7 @@ export async function updateTransaction(
       .update(data)
       .eq("id", id)
       .eq("workspace_id", ctx.workspace.id)
+      .eq("created_by", ctx.user.id)
       .select(TX_SELECT)
   ) as unknown as TxRow[];
   return rows[0] ? txDTO(rows[0], await nameMap(ctx)) : null;
@@ -199,6 +200,7 @@ export async function deleteTransaction(ctx: Ctx, id: string): Promise<boolean> 
       .delete()
       .eq("id", id)
       .eq("workspace_id", ctx.workspace.id)
+      .eq("created_by", ctx.user.id)
       .select("id")
   ) as { id: string }[];
   return rows.length > 0;
@@ -213,6 +215,7 @@ export async function deleteTransactionsInRange(ctx: Ctx, from: string, to: stri
       .from("transactions")
       .delete()
       .eq("workspace_id", ctx.workspace.id)
+      .eq("created_by", ctx.user.id)
       .gte("date", from)
       .lte("date", to)
       .select("id")

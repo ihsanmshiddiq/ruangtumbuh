@@ -15,6 +15,7 @@ import { useApi, apiFetch } from "@/lib/client";
 import { rupiah } from "@/lib/format";
 import { monthKey, addMonths, monthLabel, tanggalPendek } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import type { SessionContext } from "@/lib/types";
 import type {
   MonthSummary, TransactionDTO, CategoryDTO, TargetDTO,
 } from "@/server/finance";
@@ -33,7 +34,7 @@ type FinancePayload = {
 
 const TYPE_LABEL: Record<string, string> = { income: "masuk", expense: "keluar" };
 
-export function FinanceSection() {
+export function FinanceSection({ session }: { session: SessionContext }) {
   const { toast } = useToast();
   const [month, setMonth] = useState(() => monthKey(new Date()));
   const { data, error, loading, refetch } = useApi<FinancePayload>(`/api/finance?month=${month}`);
@@ -42,6 +43,7 @@ export function FinanceSection() {
   const [editTx, setEditTx] = useState<TransactionDTO | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [rangeOpen, setRangeOpen] = useState(false);
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
@@ -52,17 +54,18 @@ export function FinanceSection() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (data?.transactions ?? []).filter((t) => {
+      if (ownerFilter !== "all" && t.createdBy !== ownerFilter) return false;
       if (typeFilter !== "all" && t.type !== typeFilter) return false;
       if (q && !`${t.note} ${t.categoryName}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [data, search, typeFilter]);
+  }, [data, search, typeFilter, ownerFilter]);
 
   const thisMonth = monthKey(new Date());
   const rangeMatches = useMemo(() => {
     if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return [];
-    return (data?.transactions ?? []).filter((t) => t.date >= rangeFrom && t.date <= rangeTo);
-  }, [data, rangeFrom, rangeTo]);
+    return (data?.transactions ?? []).filter((t) => t.createdBy === session.user.id && t.date >= rangeFrom && t.date <= rangeTo);
+  }, [data, rangeFrom, rangeTo, session.user.id]);
 
   function openRangeDelete() {
     const [year, monthNumber] = month.split("-").map(Number);
@@ -217,16 +220,23 @@ export function FinanceSection() {
 
       {/* Daftar transaksi — kartu responsif, nominal menonjol, masuk/keluar berlabel */}
       <div>
+        <div className="flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Tampilkan transaksi milik">
+          {[{ id: "all", label: "Semua" }, ...session.workspace.members.map((m) => ({ id: m.id, label: m.id === session.user.id ? "Aku" : m.displayName }))].map((member) => (
+            <button key={member.id} type="button" onClick={() => setOwnerFilter(member.id)} aria-pressed={ownerFilter === member.id}
+              className={cn("shrink-0 min-h-9 rounded-lg border px-3 text-[0.75rem] font-medium", ownerFilter === member.id ? "border-rt-violet/50 bg-rt-violet/15 text-foreground" : "border-border text-muted-foreground")}>{member.label}</button>
+          ))}
+        </div>
+        <p className="rt-fine mt-2">Detail tetap terbuka untuk berdua; hanya pemilik transaksi yang dapat mengubah atau menghapusnya.</p>
         <div className="flex items-center gap-2 mb-3">
-          <p className="rt-kicker">transaksi ({filtered.length})</p>
-          <button
+          <p className="rt-kicker mt-3">transaksi ({filtered.length})</p>
+          {ownerFilter === session.user.id && <button
             type="button"
             onClick={openRangeDelete}
             className="ml-auto min-h-9 px-2 text-[0.65rem] font-medium text-muted-foreground hover:text-destructive"
           >
             <CalendarRange className="inline-block w-3.5 h-3.5 mr-1" aria-hidden="true" />
             hapus rentang
-          </button>
+          </button>}
         </div>
         {rangeOpen && (
           <Panel className="mb-3 border-destructive/30">
@@ -302,14 +312,14 @@ export function FinanceSection() {
                   <p className={cn("font-[family-name:var(--font-plex-mono)] font-semibold text-[0.9rem]", t.type === "income" ? "text-rt-good" : "text-destructive")}>
                     {t.type === "income" ? "+" : "−"}{rupiah(t.amount)}
                   </p>
-                  <button
+                  {t.createdBy === session.user.id ? <button
                     type="button"
                     onClick={() => { setEditTx(t); setFormOpen(true); }}
                     aria-label={`Sunting transaksi ${t.note || t.categoryName}`}
                     className="w-9 h-10 grid place-items-center rounded-lg text-muted-foreground active:bg-white/[0.05]"
                   >
                     <span className="rt-kicker text-[0.55rem]">ubah</span>
-                  </button>
+                  </button> : <span className="rt-fine text-[0.6rem]">milik {t.createdByName}</span>}
                 </div>
               </div>
             ))}

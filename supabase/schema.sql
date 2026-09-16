@@ -478,32 +478,18 @@ create policy "activities_member_select" on public.activities
 
 create policy "activities_member_insert" on public.activities
   for insert to authenticated
-  with check (exists (
+  with check (activities.created_by = auth.uid() and exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = activities.workspace_id
       and wm.user_id = auth.uid()
   ));
 
 create policy "activities_member_update" on public.activities
-  for update to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = activities.workspace_id
-      and wm.user_id = auth.uid()
-  ))
-  with check (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = activities.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for update to authenticated using (activities.created_by = auth.uid())
+  with check (activities.created_by = auth.uid());
 
 create policy "activities_member_delete" on public.activities
-  for delete to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = activities.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for delete to authenticated using (activities.created_by = auth.uid());
 
 -- ── activity_logs ──
 create policy "activity_logs_member_select" on public.activity_logs
@@ -516,32 +502,18 @@ create policy "activity_logs_member_select" on public.activity_logs
 
 create policy "activity_logs_member_insert" on public.activity_logs
   for insert to authenticated
-  with check (exists (
+  with check (activity_logs.user_id = auth.uid() and exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = activity_logs.workspace_id
       and wm.user_id = auth.uid()
   ));
 
 create policy "activity_logs_member_update" on public.activity_logs
-  for update to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = activity_logs.workspace_id
-      and wm.user_id = auth.uid()
-  ))
-  with check (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = activity_logs.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for update to authenticated using (activity_logs.user_id = auth.uid())
+  with check (activity_logs.user_id = auth.uid());
 
 create policy "activity_logs_member_delete" on public.activity_logs
-  for delete to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = activity_logs.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for delete to authenticated using (activity_logs.user_id = auth.uid());
 
 -- ── weekly_plan_entries ──
 create policy "weekly_plan_entries_member_select" on public.weekly_plan_entries
@@ -554,32 +526,18 @@ create policy "weekly_plan_entries_member_select" on public.weekly_plan_entries
 
 create policy "weekly_plan_entries_member_insert" on public.weekly_plan_entries
   for insert to authenticated
-  with check (exists (
+  with check (weekly_plan_entries.user_id = auth.uid() and exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = weekly_plan_entries.workspace_id
       and wm.user_id = auth.uid()
   ));
 
 create policy "weekly_plan_entries_member_update" on public.weekly_plan_entries
-  for update to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = weekly_plan_entries.workspace_id
-      and wm.user_id = auth.uid()
-  ))
-  with check (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = weekly_plan_entries.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for update to authenticated using (weekly_plan_entries.user_id = auth.uid())
+  with check (weekly_plan_entries.user_id = auth.uid());
 
 create policy "weekly_plan_entries_member_delete" on public.weekly_plan_entries
-  for delete to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = weekly_plan_entries.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for delete to authenticated using (weekly_plan_entries.user_id = auth.uid());
 
 -- ── energy_logs ──
 create policy "energy_logs_member_select" on public.energy_logs
@@ -766,32 +724,18 @@ create policy "transactions_member_select" on public.transactions
 
 create policy "transactions_member_insert" on public.transactions
   for insert to authenticated
-  with check (exists (
+  with check (transactions.created_by = auth.uid() and exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = transactions.workspace_id
       and wm.user_id = auth.uid()
   ));
 
 create policy "transactions_member_update" on public.transactions
-  for update to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = transactions.workspace_id
-      and wm.user_id = auth.uid()
-  ))
-  with check (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = transactions.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for update to authenticated using (transactions.created_by = auth.uid())
+  with check (transactions.created_by = auth.uid());
 
 create policy "transactions_member_delete" on public.transactions
-  for delete to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = transactions.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  for delete to authenticated using (transactions.created_by = auth.uid());
 
 -- ── allocation_items ──
 create policy "allocation_items_member_select" on public.allocation_items

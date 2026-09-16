@@ -17,6 +17,7 @@ export function OccurrenceCard({
   onReschedule,
   onUnavailable,
   compact = false,
+  canManage = true,
 }: {
   occ: OccurrenceDTO;
   busy?: boolean;
@@ -25,6 +26,7 @@ export function OccurrenceCard({
   onReschedule: () => void;
   onUnavailable?: () => void;
   compact?: boolean;
+  canManage?: boolean;
 }) {
   const waktu = sekitarJam(occ.plannedStartTime);
   const durasi = durasiMenit(occ.plannedDurationMinutes);
@@ -65,11 +67,12 @@ export function OccurrenceCard({
             </p>
           )}
           {occ.note && <p className="text-[0.78rem] text-muted-foreground mt-1">{occ.note}</p>}
+          {!canManage && <p className="rt-fine mt-1">milik {occ.userName} · hanya dilihat</p>}
         </div>
 
         {/* Aksi cepat — target sentuh ≥40px, label teks jelas */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {!isDone && (
+          {canManage && !isDone && (
             <button
               type="button"
               onClick={onDone}
@@ -81,7 +84,7 @@ export function OccurrenceCard({
               <Check className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
           )}
-          {!isSkipped && !isDone && (
+          {canManage && !isSkipped && !isDone && (
             <button
               type="button"
               onClick={onSkip}
@@ -93,7 +96,7 @@ export function OccurrenceCard({
               <X className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
           )}
-          {!isDone && onUnavailable && (
+          {canManage && !isDone && onUnavailable && (
             <button
               type="button"
               onClick={onUnavailable}
@@ -105,7 +108,7 @@ export function OccurrenceCard({
               <CircleSlash className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
           )}
-          {!isDone && (
+          {canManage && !isDone && (
             <button
               type="button"
               onClick={onReschedule}

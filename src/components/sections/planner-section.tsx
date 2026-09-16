@@ -17,9 +17,10 @@ import { SectionHeader, EmptyState, Panel, TinySpinner } from "@/components/shar
 import { useApi, apiFetch } from "@/lib/client";
 import { weekDates, weekStartOf, addDays, tanggalIndo, tanggalPendek, durasiMenit, HARI_SINGKAT, DOW_TO_WEEK_INDEX } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import type { SessionContext } from "@/lib/types";
 import type { WeekView, OccurrenceDTO } from "@/server/planner";
 
-export function PlannerSection() {
+export function PlannerSection({ session }: { session: SessionContext }) {
   const { toast } = useToast();
   const [anchor, setAnchor] = useState(() => weekStartOf(toISO(new Date())));
   const { data, error, loading, refetch } = useApi<WeekView>(`/api/planner/week?start=${anchor}`);
@@ -30,18 +31,21 @@ export function PlannerSection() {
   const [unavail, setUnavail] = useState<OccurrenceDTO | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [durationTarget, setDurationTarget] = useState<OccurrenceDTO | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState<string>(session.user.id);
 
   const dates = weekDates(data?.weekStart ?? anchor);
   const byDow = useMemo(() => {
     const map: Record<number, OccurrenceDTO[]> = {};
     for (let i = 0; i < 7; i++) map[i] = [];
-    for (const o of data?.occurrences ?? []) map[o.dow]?.push(o);
+    for (const o of data?.occurrences ?? []) {
+      if (ownerFilter === "all" || o.userId === ownerFilter) map[o.dow]?.push(o);
+    }
     return map;
-  }, [data]);
+  }, [data, ownerFilter]);
 
   const flexActivities = useMemo(
-    () => (data?.activities ?? []).filter((a) => a.preferredDays.length === 0),
-    [data]
+    () => (data?.activities ?? []).filter((a) => a.createdBy === session.user.id && a.preferredDays.length === 0),
+    [data, session.user.id]
   );
 
   async function setStatus(occ: OccurrenceDTO, status: "done" | "skipped" | "planned") {
@@ -118,6 +122,14 @@ export function PlannerSection() {
         </Panel>
       )}
 
+      <div className="flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Tampilkan rencana milik">
+        {[{ id: "all", label: "Semua" }, ...session.workspace.members.map((m) => ({ id: m.id, label: m.id === session.user.id ? "Aku" : m.displayName }))].map((member) => (
+          <button key={member.id} type="button" onClick={() => setOwnerFilter(member.id)} aria-pressed={ownerFilter === member.id}
+            className={cn("shrink-0 min-h-9 rounded-lg border px-3 text-[0.75rem] font-medium", ownerFilter === member.id ? "border-rt-violet/50 bg-rt-violet/15 text-foreground" : "border-border text-muted-foreground")}>{member.label}</button>
+        ))}
+      </div>
+      <p className="rt-fine">Detail rencana bisa dilihat berdua. Status, pindah jadwal, dan aktivitas hanya dapat diubah oleh pemiliknya.</p>
+
       {/* Pemilih hari — horizontal di mobile, grid di desktop */}
       <div className="grid grid-cols-7 gap-1.5" role="tablist" aria-label="Pilih hari">
         {dates.map((d, i) => (
@@ -171,6 +183,7 @@ export function PlannerSection() {
                 onSkip={() => setStatus(occ, "skipped")}
                 onReschedule={() => setResched(occ)}
                 onUnavailable={() => setUnavail(occ)}
+                canManage={occ.userId === session.user.id}
               />
             ))}
           </div>
