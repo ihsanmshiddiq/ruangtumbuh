@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { OccurrenceCard } from "@/components/planner/occurrence-card";
 import { RescheduleDrawer } from "@/components/planner/reschedule-drawer";
@@ -297,6 +298,7 @@ export function PlannerSection({ session }: { session: SessionContext }) {
       />
 
       <DurationDrawer
+        key={durationTarget?.id ?? "duration-empty"}
         occ={durationTarget}
         onOpenChange={(v) => !v && setDurationTarget(null)}
         onSaved={async (msg) => {
@@ -321,6 +323,7 @@ function DurationDrawer({
   onSaved: (msg: string) => void;
 }) {
   const [minutes, setMinutes] = useState<string>("");
+  const [resultNote, setResultNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -341,8 +344,15 @@ function DurationDrawer({
     try {
       const body: Record<string, unknown> = { id: occ.id, status: "done" };
       if (withDuration && minutes) body.actualDurationMinutes = Number(minutes.replace(/\D/g, ""));
+      if (resultNote.trim()) body.note = resultNote.trim();
       await apiFetch("/api/occurrences", { method: "PATCH", body: JSON.stringify(body) });
-      onSaved(withDuration && minutes ? `Selesai: ${occ.activityName} (${durasiMenit(Number(minutes))})` : `Ditandai selesai: ${occ.activityName}`);
+      onSaved(
+        resultNote.trim()
+          ? `Selesai: ${occ.activityName} — ${resultNote.trim()}`
+          : withDuration && minutes
+            ? `Selesai: ${occ.activityName} (${durasiMenit(Number(minutes))})`
+            : `Ditandai selesai: ${occ.activityName}`
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal menyimpan.");
       setSaving(false);
@@ -397,15 +407,28 @@ function DurationDrawer({
               />
             </div>
 
+            <div className="mt-3">
+              <Label htmlFor="result-note" className="rt-kicker">hasil yang dikerjakan (opsional)</Label>
+              <Textarea
+                id="result-note"
+                value={resultNote}
+                onChange={(event) => setResultNote(event.target.value.slice(0, 300))}
+                maxLength={300}
+                placeholder="mis. 20 reps squat, baca 20 halaman, atau poin yang selesai"
+                className="mt-1.5 min-h-20 resize-none"
+              />
+              <p className="rt-fine mt-1">Catatan ini tampil di agenda dan jadi bahan evaluasi mingguan.</p>
+            </div>
+
             {error && <p role="alert" className="text-sm text-destructive mt-3">{error}</p>}
 
             <div className="mt-5 flex gap-2">
               <Button variant="outline" className="flex-1 h-11" onClick={() => submit(false)} disabled={saving}>
-                Selesai tanpa catat
+                Selesai tanpa menit
               </Button>
-              <Button className="flex-[2] h-11 font-semibold" onClick={() => submit(true)} disabled={saving || !minutes}>
+              <Button className="flex-[2] h-11 font-semibold" onClick={() => submit(true)} disabled={saving || (!minutes && !resultNote.trim())}>
                 {saving && <TinySpinner />}
-                Simpan durasi
+                Simpan hasil
               </Button>
             </div>
           </div>

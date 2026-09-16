@@ -10,7 +10,6 @@ import {
   CloudOff,
   Landmark,
   MessagesSquare,
-  Sparkles,
   StickyNote,
   Sunrise,
   TrendingDown,
@@ -50,7 +49,6 @@ export function TodaySection({ session }: { session: SessionContext }) {
     () => (data?.week.occurrences ?? []).filter((occurrence) => occurrence.date === today),
     [data, today]
   );
-  const energyToday = data?.week.energy.find((energy) => energy.date === today)?.level ?? null;
   const completed = hariIni.filter((occurrence) => occurrence.status === "done").length;
   const planned = hariIni.filter((occurrence) => occurrence.status === "planned").length;
 
@@ -88,18 +86,6 @@ export function TodaySection({ session }: { session: SessionContext }) {
     } catch (cause) {
       toast({ title: cause instanceof Error ? cause.message : "Pindah jadwal gagal." });
       return false;
-    }
-  }
-
-  async function setEnergy(level: number) {
-    try {
-      await apiFetch("/api/energy", {
-        method: "PUT",
-        body: JSON.stringify({ date: today, level }),
-      });
-      await refetch();
-    } catch (cause) {
-      toast({ title: cause instanceof Error ? cause.message : "Gagal menyimpan energi." });
     }
   }
 
@@ -145,7 +131,6 @@ export function TodaySection({ session }: { session: SessionContext }) {
             const agenda = hariIni.filter((occurrence) => occurrence.userId === member.id);
             const done = agenda.filter((occurrence) => occurrence.status === "done").length;
             const remaining = agenda.filter((occurrence) => occurrence.status === "planned").length;
-            const energy = data?.week.energyByUser[member.id]?.find((item) => item.date === today)?.level;
             const progress = agenda.length === 0 ? 0 : Math.round((done / agenda.length) * 100);
             return (
               <div key={member.id} className="rounded-xl border border-border/70 bg-white/[0.02] p-3.5">
@@ -154,7 +139,6 @@ export function TodaySection({ session }: { session: SessionContext }) {
                     <p className="text-[0.9rem] font-semibold">{member.displayName}</p>
                     <p className="rt-fine mt-0.5">{member.id === session.user.id ? "rencanamu" : "rencana pasangan"}</p>
                   </div>
-                  {energy ? <span className="rt-kicker text-[0.55rem] text-rt-lilac">energi {energy}/3</span> : null}
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-3">
                   <MiniStat label="agenda" value={agenda.length} loading={loading} />
@@ -209,24 +193,6 @@ export function TodaySection({ session }: { session: SessionContext }) {
           <MoneyStat icon={Wallet} label="saldo" value={data?.finance.balance} tone="balance" />
         </div>
         <p className="rt-fine">{data ? `${data.finance.txCount} transaksi pribadi tercatat bulan ini.` : "Memuat transaksi pribadi…"}</p>
-      </Panel>
-
-      <Panel>
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="w-4 h-4 text-rt-lilac" aria-hidden="true" />
-          <p className="rt-kicker">energi hari ini</p>
-        </div>
-        <div className="flex items-center gap-2" role="group" aria-label="Set level energi hari ini">
-          {[
-            { level: 1, label: "rendah" },
-            { level: 2, label: "sedang" },
-            { level: 3, label: "tinggi" },
-          ].map(({ level, label }) => (
-            <button key={level} type="button" onClick={() => setEnergy(level)} aria-pressed={energyToday === level}
-              className={cn("flex-1 min-h-11 rounded-xl border px-3 py-2 text-[0.8rem] font-medium transition-colors", energyToday === level ? "border-rt-violet/50 bg-rt-violet/15 text-foreground" : "border-border text-muted-foreground active:bg-white/[0.04]")}>{label}</button>
-          ))}
-        </div>
-        <p className="rt-fine mt-2">Sekadar konteks untuk membaca pola bersama—bukan penilaian.</p>
       </Panel>
 
       <div>
