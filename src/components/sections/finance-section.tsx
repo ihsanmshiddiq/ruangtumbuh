@@ -50,6 +50,7 @@ export function FinanceSection() {
   const [showTools, setShowTools] = useState(false);
   const [showAllocTools, setShowAllocTools] = useState(false);
   const [showCatManager, setShowCatManager] = useState(false);
+  const [analyticsTab, setAnalyticsTab] = useState<"cashflow" | "donut">("cashflow");
   const [editingTarget, setEditingTarget] = useState<string | null>(null);
   const [tName, setTName] = useState("");
   const [tAmount, setTAmount] = useState("");
@@ -231,12 +232,37 @@ export function FinanceSection() {
         ))}
       </div>
 
-      {/* Grafik arus kas harian + donut "ke mana uang pergi" */}
+      {/* Grafik arus kas harian + donut "ke mana uang pergi" — satu panel bertab */}
       {data && data.summary.txCount > 0 && (
-        <div className="grid lg:grid-cols-[1.45fr_1fr] gap-2 sm:gap-3 order-6">
-          <CashflowChart daily={data.summary.daily} month={month} />
-          <SpendingDonut byCategory={data.summary.byCategory} totalExpense={data.summary.expense} />
-        </div>
+        <Panel className="order-6">
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <p className="rt-kicker">analisis bulan ini</p>
+            <div className="flex gap-1" role="tablist" aria-label="Analisis keuangan">
+              {(["cashflow", "donut"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={analyticsTab === t}
+                  onClick={() => setAnalyticsTab(t)}
+                  className={cn(
+                    "min-h-9 rounded-lg border px-3 text-[0.72rem] font-medium transition-colors",
+                    analyticsTab === t
+                      ? "border-rt-violet/50 bg-rt-violet/15 text-foreground"
+                      : "border-border text-muted-foreground active:bg-white/[0.04]"
+                  )}
+                >
+                  {t === "cashflow" ? "arus kas" : "ke mana uang pergi"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {analyticsTab === "cashflow" ? (
+            <CashflowChart daily={data.summary.daily} month={month} />
+          ) : (
+            <SpendingDonut byCategory={data.summary.byCategory} totalExpense={data.summary.expense} />
+          )}
+        </Panel>
       )}
 
       {/* Filter & cari */}
@@ -350,7 +376,7 @@ export function FinanceSection() {
             {filtered.map((t) => (
               <div
                 key={t.id}
-                className="rounded-xl border border-border/70 bg-white/[0.02] px-4 py-3.5 flex items-center gap-3"
+                className="hover-lift rounded-xl border border-border/70 bg-white/[0.02] px-4 py-3.5 flex items-center gap-3"
               >
                 <span
                   aria-hidden="true"
@@ -923,8 +949,7 @@ function CashflowChart({
   const ticks = [1, Math.ceil(days / 2), days];
 
   return (
-    <Panel className="px-4 py-4">
-      <p className="rt-kicker mb-0.5">arus kas harian</p>
+    <div>
       <p className="rt-fine mb-3">Pemasukan dan pengeluaran bulan ini, hari demi hari.</p>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -966,7 +991,7 @@ function CashflowChart({
         </span>
         <span className="rt-fine ml-auto">puncak keluar {rupiah(Math.max(0, ...daily.map((d) => d.expense)))}</span>
       </div>
-    </Panel>
+    </div>
   );
 }
 
@@ -989,8 +1014,7 @@ function SpendingDonut({
   });
 
   return (
-    <Panel className="px-4 py-4">
-      <p className="rt-kicker mb-0.5">ke mana uang pergi</p>
+    <div>
       <p className="rt-fine mb-3">Rincian pengeluaran per kategori.</p>
       {rows.length === 0 ? (
         <p className="rt-fine py-8 text-center">Belum ada pengeluaran bulan ini.</p>
@@ -1022,7 +1046,7 @@ function SpendingDonut({
           </ul>
         </div>
       )}
-    </Panel>
+    </div>
   );
 }
 

@@ -51,11 +51,15 @@ export function OccurrenceCard({
             <span
               className={cn(
                 "text-[0.92rem] font-semibold leading-tight",
+                isDone && "text-muted-foreground",
                 isSkipped && "line-through decoration-1 text-muted-foreground"
               )}
             >
               {occ.activityName}
             </span>
+            {isDone && (
+              <Check className="w-3.5 h-3.5 text-rt-good/80 shrink-0" aria-hidden="true" />
+            )}
             <StatusBadge status={occ.status} />
           </div>
           {!compact && durasi && (

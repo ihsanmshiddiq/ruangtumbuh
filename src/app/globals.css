@@ -226,6 +226,16 @@
 }
 
 /* Hormati preferensi gerakan minim — PWA terasa tenang, bukan penuh animasi. */
+/* Hover halus untuk kartu/panel — terasa hidup tanpa berlebihan.
+   Reduced-motion sudah menonaktifkan transisi lewat blok di bawah. */
+.hover-lift {
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -64,7 +64,7 @@ export function NotesSection() {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-6">
       <SectionHeader
         kicker="ruang menulis"
         title="Notes"

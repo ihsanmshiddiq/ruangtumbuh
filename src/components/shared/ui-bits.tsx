@@ -64,9 +64,17 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-white/[0.012] px-6 py-10 text-center">
-      <Icon className="w-6 h-6 mx-auto text-muted-foreground/70" aria-hidden="true" />
-      <p className="mt-3 text-[0.9rem] font-medium">{title}</p>
+    <div className="rounded-2xl border border-dashed border-border bg-white/[0.012] px-6 py-12 text-center">
+      {/* Ilustrasi garis sederhana — kosong itu wajar, bukan pesan error */}
+      <div aria-hidden="true" className="relative mx-auto mb-3 flex h-14 w-28 items-center justify-center">
+        <span className="absolute left-0 grid h-14 w-14 place-items-center rounded-full border border-border/80 bg-white/[0.02]">
+          <Icon className="w-5 h-5 text-muted-foreground/60" />
+        </span>
+        <svg viewBox="0 0 56 28" fill="none" className="absolute right-0 h-7 w-14 text-muted-foreground/35">
+          <path d="M2 22h30M10 14h22M18 6h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      </div>
+      <p className="mt-1 text-[0.9rem] font-medium">{title}</p>
       {hint && <p className="rt-fine mt-1.5 max-w-xs mx-auto leading-relaxed">{hint}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -77,10 +85,14 @@ export function TinySpinner({ className }: { className?: string }) {
   return <Loader2 className={cn("w-3.5 h-3.5 animate-spin", className)} aria-hidden="true" />;
 }
 
-/** Panel kartu standar — satu gaya untuk semua halaman. */
+/** Panel kartu standar — satu gaya untuk semua halaman. Hover halus, hormati reduced-motion. */
 export function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-2xl border border-border bg-white/[0.018] p-4 sm:p-5", className)}>
+    <div className={cn(
+      "rounded-2xl border border-border bg-white/[0.018] p-4 sm:p-5 transition-[border-color,background-color] duration-200",
+      "hover:border-white/[0.16] hover:bg-white/[0.028]",
+      className
+    )}>
       {children}
     </div>
   );
