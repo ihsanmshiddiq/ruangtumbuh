@@ -194,8 +194,8 @@ export function TodaySection({ session }: { session: SessionContext }) {
           <div className="flex items-center gap-2">
             <Landmark className="w-4 h-4 text-rt-lilac" aria-hidden="true" />
             <div>
-              <p className="rt-kicker">keuangan masing-masing</p>
-              <p className="rt-fine mt-0.5">{data ? monthLabel(data.month) : "bulan ini"} · tetap tercatat atas nama pemiliknya</p>
+              <p className="rt-kicker">keuangan pribadiku</p>
+              <p className="rt-fine mt-0.5">{data ? monthLabel(data.month) : "bulan ini"} · hanya terlihat olehmu</p>
             </div>
           </div>
           <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={() => goToSection("finance")}>
@@ -204,39 +204,11 @@ export function TodaySection({ session }: { session: SessionContext }) {
         </div>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
-          <MoneyStat icon={TrendingUp} label="masuk bersama" value={data?.finance.combined.income} tone="good" />
-          <MoneyStat icon={TrendingDown} label="keluar bersama" value={data?.finance.combined.expense} tone="expense" />
-          <MoneyStat icon={Wallet} label="saldo bersama" value={data?.finance.combined.balance} tone="balance" />
+          <MoneyStat icon={TrendingUp} label="pemasukan" value={data?.finance.income} tone="good" />
+          <MoneyStat icon={TrendingDown} label="pengeluaran" value={data?.finance.expense} tone="expense" />
+          <MoneyStat icon={Wallet} label="saldo" value={data?.finance.balance} tone="balance" />
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {session.workspace.members.map((member) => {
-            const money = data?.finance.byMember[member.id];
-            return (
-              <div key={member.id} className="rounded-xl border border-border/70 bg-white/[0.02] p-3.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[0.9rem] font-semibold">{member.displayName}</p>
-                    <p className="rt-fine mt-0.5">{money?.txCount ?? 0} transaksi bulan ini</p>
-                  </div>
-                  <p className={cn("font-[family-name:var(--font-plex-mono)] text-sm font-semibold", (money?.balance ?? 0) < 0 ? "text-destructive" : "text-rt-lilac")}>
-                    {money ? rupiah(money.balance) : "…"}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-3">
-                  <div className="rounded-lg border border-border/60 px-2.5 py-2">
-                    <p className="rt-kicker text-[0.52rem]">masuk</p>
-                    <p className="mt-1 text-[0.78rem] font-[family-name:var(--font-plex-mono)] text-rt-good font-semibold">{money ? rupiah(money.income) : "…"}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 px-2.5 py-2">
-                    <p className="rt-kicker text-[0.52rem]">keluar</p>
-                    <p className="mt-1 text-[0.78rem] font-[family-name:var(--font-plex-mono)] text-destructive font-semibold">{money ? rupiah(money.expense) : "…"}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <p className="rt-fine">{data ? `${data.finance.txCount} transaksi pribadi tercatat bulan ini.` : "Memuat transaksi pribadi…"}</p>
       </Panel>
 
       <Panel>

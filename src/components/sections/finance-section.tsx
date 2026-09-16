@@ -1,6 +1,6 @@
 "use client";
 
-// BUKU KAS — transaksi berdua dalam satu workspace.
+// BUKU KAS PRIBADI — transaksi dan ringkasan hanya untuk pemilik sesi.
 // Prioritas Fase 3: tambah transaksi 1 tangan (jenis → nominal → kategori →
 // tanggal → catatan), ringkasan jelas, alokasi ≠ lensa 50/30/20 (dijelaskan).
 import { useMemo, useState } from "react";
@@ -15,7 +15,6 @@ import { useApi, apiFetch } from "@/lib/client";
 import { rupiah } from "@/lib/format";
 import { monthKey, addMonths, monthLabel, tanggalPendek } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import type { SessionContext } from "@/lib/types";
 import type {
   MonthSummary, TransactionDTO, CategoryDTO, TargetDTO,
 } from "@/server/finance";
@@ -34,7 +33,7 @@ type FinancePayload = {
 
 const TYPE_LABEL: Record<string, string> = { income: "masuk", expense: "keluar" };
 
-export function FinanceSection({ session }: { session: SessionContext }) {
+export function FinanceSection() {
   const { toast } = useToast();
   const [month, setMonth] = useState(() => monthKey(new Date()));
   const { data, error, loading, refetch } = useApi<FinancePayload>(`/api/finance?month=${month}`);
@@ -43,7 +42,6 @@ export function FinanceSection({ session }: { session: SessionContext }) {
   const [editTx, setEditTx] = useState<TransactionDTO | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
-  const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [rangeOpen, setRangeOpen] = useState(false);
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
@@ -54,18 +52,17 @@ export function FinanceSection({ session }: { session: SessionContext }) {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (data?.transactions ?? []).filter((t) => {
-      if (ownerFilter !== "all" && t.createdBy !== ownerFilter) return false;
       if (typeFilter !== "all" && t.type !== typeFilter) return false;
       if (q && !`${t.note} ${t.categoryName}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [data, search, typeFilter, ownerFilter]);
+  }, [data, search, typeFilter]);
 
   const thisMonth = monthKey(new Date());
   const rangeMatches = useMemo(() => {
     if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return [];
-    return (data?.transactions ?? []).filter((t) => t.createdBy === session.user.id && t.date >= rangeFrom && t.date <= rangeTo);
-  }, [data, rangeFrom, rangeTo, session.user.id]);
+    return (data?.transactions ?? []).filter((t) => t.date >= rangeFrom && t.date <= rangeTo);
+  }, [data, rangeFrom, rangeTo]);
 
   function openRangeDelete() {
     const [year, monthNumber] = month.split("-").map(Number);
@@ -141,7 +138,7 @@ export function FinanceSection({ session }: { session: SessionContext }) {
   }
 
   return (
-    <section aria-label="Keuangan" className="space-y-6">
+    <section aria-label="Keuangan pribadi" className="flex flex-col gap-6">
       <SectionHeader
         kicker="buku kas"
         title={monthLabel(month)}
@@ -168,7 +165,7 @@ export function FinanceSection({ session }: { session: SessionContext }) {
       )}
 
       {/* Ringkasan: pemasukan, pengeluaran, saldo */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 order-6">
         {[
           { icon: TrendingUp, label: "pemasukan", value: data?.summary.income, cls: "text-rt-good" },
           { icon: TrendingDown, label: "pengeluaran", value: data?.summary.expense, cls: "text-destructive" },
@@ -185,7 +182,7 @@ export function FinanceSection({ session }: { session: SessionContext }) {
       </div>
 
       {/* Filter & cari */}
-      <Panel className="py-3">
+      <Panel className="py-3 order-7">
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
@@ -219,24 +216,18 @@ export function FinanceSection({ session }: { session: SessionContext }) {
       </Panel>
 
       {/* Daftar transaksi — kartu responsif, nominal menonjol, masuk/keluar berlabel */}
-      <div>
-        <div className="flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Tampilkan transaksi milik">
-          {[{ id: "all", label: "Semua" }, ...session.workspace.members.map((m) => ({ id: m.id, label: m.id === session.user.id ? "Aku" : m.displayName }))].map((member) => (
-            <button key={member.id} type="button" onClick={() => setOwnerFilter(member.id)} aria-pressed={ownerFilter === member.id}
-              className={cn("shrink-0 min-h-9 rounded-lg border px-3 text-[0.75rem] font-medium", ownerFilter === member.id ? "border-rt-violet/50 bg-rt-violet/15 text-foreground" : "border-border text-muted-foreground")}>{member.label}</button>
-          ))}
-        </div>
-        <p className="rt-fine mt-2">Detail tetap terbuka untuk berdua; hanya pemilik transaksi yang dapat mengubah atau menghapusnya.</p>
+      <div className="order-8">
+        <p className="rt-fine">Transaksi, nominal, dan ringkasan di halaman ini hanya milikmu.</p>
         <div className="flex items-center gap-2 mb-3">
           <p className="rt-kicker mt-3">transaksi ({filtered.length})</p>
-          {ownerFilter === session.user.id && <button
+          <button
             type="button"
             onClick={openRangeDelete}
             className="ml-auto min-h-9 px-2 text-[0.65rem] font-medium text-muted-foreground hover:text-destructive"
           >
             <CalendarRange className="inline-block w-3.5 h-3.5 mr-1" aria-hidden="true" />
             hapus rentang
-          </button>}
+          </button>
         </div>
         {rangeOpen && (
           <Panel className="mb-3 border-destructive/30">
@@ -304,22 +295,21 @@ export function FinanceSection({ session }: { session: SessionContext }) {
                     <span className="text-muted-foreground font-normal"> · {t.categoryName}</span>
                   </p>
                   <p className="rt-fine mt-0.5">
-                    {tanggalPendek(t.date)} · {TYPE_LABEL[t.type]} · {t.createdByName}
-                    {t.createdByName !== "—" ? "" : ""}
+                    {tanggalPendek(t.date)} · {TYPE_LABEL[t.type]}
                   </p>
                 </div>
                 <div className="text-right shrink-0 flex items-center gap-1">
                   <p className={cn("font-[family-name:var(--font-plex-mono)] font-semibold text-[0.9rem]", t.type === "income" ? "text-rt-good" : "text-destructive")}>
                     {t.type === "income" ? "+" : "−"}{rupiah(t.amount)}
                   </p>
-                  {t.createdBy === session.user.id ? <button
+                  <button
                     type="button"
                     onClick={() => { setEditTx(t); setFormOpen(true); }}
                     aria-label={`Sunting transaksi ${t.note || t.categoryName}`}
                     className="w-9 h-10 grid place-items-center rounded-lg text-muted-foreground active:bg-white/[0.05]"
                   >
                     <span className="rt-kicker text-[0.55rem]">ubah</span>
-                  </button> : <span className="rt-fine text-[0.6rem]">milik {t.createdByName}</span>}
+                  </button>
                 </div>
               </div>
             ))}
@@ -329,7 +319,7 @@ export function FinanceSection({ session }: { session: SessionContext }) {
 
       {/* Alokasi pemasukan — SISTEM TERPISAH dari lensa 50/30/20 */}
       {data && (data.allocation.income > 0 || showAllocTools) && (
-        <Panel>
+        <Panel className="order-3">
           <div className="flex items-center gap-2 mb-1">
             <PlusCircle className="w-4 h-4 text-rt-teal" aria-hidden="true" />
             <p className="rt-kicker">alokasi otomatis pemasukan</p>
@@ -374,7 +364,7 @@ export function FinanceSection({ session }: { session: SessionContext }) {
 
       {/* Lensa 50/30/20 — interpretasi pengeluaran */}
       {data && data.summary.expense > 0 && (
-        <Panel>
+        <Panel className="order-4">
           <p className="rt-kicker mb-1">lensa pengeluaran 50/30/20</p>
           <p className="rt-fine mb-4">
             Panduan membaca komposisi pengeluaran bulan ini — bukan aturan, dan bukan bagian
@@ -402,7 +392,7 @@ export function FinanceSection({ session }: { session: SessionContext }) {
       )}
 
       {/* Dana target */}
-      <div>
+      <div className="order-5">
         <div className="flex items-center gap-2 mb-3">
           <Target className="w-4 h-4 text-rt-violet" aria-hidden="true" />
           <p className="rt-kicker">dana target</p>

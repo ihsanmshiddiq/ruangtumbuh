@@ -165,7 +165,7 @@ export function AppShell({ session }: { session: SessionContext }) {
         >
           {active === "today" && <TodaySection session={session} />}
           {active === "planner" && <PlannerSection session={session} />}
-          {active === "finance" && <FinanceSection session={session} />}
+          {active === "finance" && <FinanceSection />}
           {active === "reflection" && <ReflectionSection />}
           {active === "notes" && <NotesSection />}
           {active === "chat" && <ChatSection />}
@@ -173,7 +173,7 @@ export function AppShell({ session }: { session: SessionContext }) {
 
           {/* PWA: status koneksi + ajakan memasang yang halus, tanpa interupsi */}
           <OfflineBanner className="lg:hidden" />
-          <InstallPromptCard className="lg:hidden" />
+          <InstallPromptCard />
         </main>
 
         {/* Footer — menempel di bawah saat konten pendek, terdorong alami saat panjang */}

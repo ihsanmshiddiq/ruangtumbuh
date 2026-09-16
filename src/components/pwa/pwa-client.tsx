@@ -126,7 +126,10 @@ export function InstallPromptCard({ className }: { className?: string }) {
     const onPrompt = (e: Event) => {
       e.preventDefault(); // cegah popup bawaan browser yang mengganggu
       try {
-        if (window.localStorage.getItem(DISMISS_KEY)) return;
+        const dismissedAt = Number(window.localStorage.getItem(DISMISS_KEY));
+        if (Number.isFinite(dismissedAt) && Date.now() - dismissedAt < DISMISS_MS) return;
+        // Dismiss lama atau rusak tidak boleh menyembunyikan instalasi selamanya.
+        window.localStorage.removeItem(DISMISS_KEY);
       } catch {
         // abaikan — tetap tawarkan
       }

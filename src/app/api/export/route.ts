@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /**
  * BACKUP LENGKAP (Fase 5): satu file JSON berisi seluruh data workspace yang
  * bisa diakses pemanggil — workspace, aktivitas, log, rencana, energi,
- * refleksi, komentar, chat, dan seluruh Buku Kas. Tanpa credential apa pun.
+ * refleksi, komentar, chat, dan Buku Kas pribadi pemanggil. Tanpa credential apa pun.
  * File ini privat: dibuat on-demand, diunduh langsung oleh pengguna, tidak
  * pernah dikirim ke layanan pihak ketiga.
  */
@@ -45,7 +45,7 @@ export async function GET() {
     sb.from("comments").select("*").eq("workspace_id", wsId).order("created_at"),
     sb.from("messages").select("*").eq("workspace_id", wsId).order("created_at"),
     sb.from("transaction_categories").select("*").eq("workspace_id", wsId).order("name"),
-    sb.from("transactions").select("*").eq("workspace_id", wsId).order("date"),
+    sb.from("transactions").select("*").eq("workspace_id", wsId).eq("created_by", ctx.user.id).order("date"),
     sb.from("financial_targets").select("*").eq("workspace_id", wsId).order("created_at"),
     // Notes: hanya yang BOLEH dibaca pengguna ini (miliknya + shared) —
     // note private partner tidak pernah keluar dari database lewat backup.

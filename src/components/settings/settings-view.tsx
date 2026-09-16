@@ -383,6 +383,13 @@ export function SettingsView({ session }: { session: SessionContext }) {
             </p>
           </div>
           <div className="rounded-xl border border-border/70 bg-white/[0.02] px-4 py-3.5">
+            <p className="text-[0.84rem] font-medium mb-1">Laptop · Chrome atau Edge</p>
+            <p className="text-[0.78rem] text-muted-foreground leading-relaxed">
+              Cari ikon pasang di ujung kanan address bar, atau buka menu titik tiga lalu pilih
+              "Pasang Ruang Tumbuh" / "Install app". Jangan gunakan mode Incognito karena browser tidak mengizinkan pemasangan di sana.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-white/[0.02] px-4 py-3.5">
             <p className="text-[0.84rem] font-medium mb-1">iPhone · Safari</p>
             <p className="text-[0.78rem] text-muted-foreground leading-relaxed">
               Ketuk tombol Bagikan (kotak dengan panah ke atas), lalu gulir dan pilih

@@ -231,6 +231,7 @@ export async function getTransaction(ctx: Ctx, id: string): Promise<TransactionD
       .select(TX_SELECT)
       .eq("id", id)
       .eq("workspace_id", ctx.workspace.id)
+      .eq("created_by", ctx.user.id)
       .limit(1)
   ) as unknown as TxRow[];
   return rows[0] ? txDTO(rows[0], await nameMap(ctx)) : null;
@@ -254,12 +255,12 @@ function monthRange(month: string): { from: string; to: string } {
   return { from, to };
 }
 
-/** Ringkasan bulan: pemasukan, pengeluaran, saldo, komposisi per bucket. */
+/** Ringkasan bulan milik pengguna aktif — transaksi pasangan tidak ikut. */
 export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSummary> {
   const { from, to } = monthRange(month);
   const sb = await getSupabaseFor(ctx);
   const [txRows, cats] = await Promise.all([
-    sb.from("transactions").select("date, type, amount, category_id").eq("workspace_id", ctx.workspace.id).gte("date", from).lte("date", to),
+    sb.from("transactions").select("date, type, amount, category_id").eq("workspace_id", ctx.workspace.id).eq("created_by", ctx.user.id).gte("date", from).lte("date", to),
     listCategories(ctx),
   ]);
   const rows = (unwrap(txRows) ?? []) as unknown as { date: string; type: string; amount: number; category_id: string }[];
@@ -292,7 +293,7 @@ export async function getMonthSummary(ctx: Ctx, month: string): Promise<MonthSum
   return { month, income, expense, balance: income - expense, byBucket, byCategory, txCount: rows.length };
 }
 
-/** Daftar transaksi sebulan (urut tanggal terbaru) — batch, tanpa N+1. */
+/** Daftar transaksi pribadi sebulan (urut tanggal terbaru) — batch, tanpa N+1. */
 export async function listMonthTransactions(
   ctx: Ctx,
   month: string,
@@ -305,6 +306,7 @@ export async function listMonthTransactions(
       .from("transactions")
       .select(TX_SELECT)
       .eq("workspace_id", ctx.workspace.id)
+      .eq("created_by", ctx.user.id)
       .gte("date", from)
       .lte("date", to)
       .order("date", { ascending: false })

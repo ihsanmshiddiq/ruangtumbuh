@@ -714,13 +714,11 @@ create policy "transaction_categories_member_delete" on public.transaction_categ
   ));
 
 -- ── transactions ──
-create policy "transactions_member_select" on public.transactions
+-- Buku kas bersifat pribadi. Rencana dan refleksi boleh dilihat berdua,
+-- tetapi transaksi (termasuk nominal dan catatan) hanya terbuka untuk pemilik.
+create policy "transactions_owner_select" on public.transactions
   for select to authenticated
-  using (exists (
-    select 1 from public.workspace_members wm
-    where wm.workspace_id = transactions.workspace_id
-      and wm.user_id = auth.uid()
-  ));
+  using (transactions.created_by = auth.uid());
 
 create policy "transactions_member_insert" on public.transactions
   for insert to authenticated

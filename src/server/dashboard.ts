@@ -1,5 +1,5 @@
-// Data ringkas untuk beranda bersama. Sengaja tidak mengirim daftar transaksi
-// penuh: dashboard cukup membawa angka per orang dan agenda minggu berjalan.
+// Data ringkas untuk beranda bersama. Perencanaan dapat dibaca berdua, tetapi
+// angka keuangan hanya boleh kembali ke pemilik sesi.
 import type { SessionContext } from "@/lib/types";
 import { isISODate, monthKey, weekStartOf } from "@/lib/dates";
 import { getSupabaseFor, unwrap } from "@/server/db";
@@ -16,10 +16,7 @@ export type DashboardPayload = {
   date: string;
   month: string;
   week: WeekView;
-  finance: {
-    combined: PersonalMoneySummary;
-    byMember: Record<string, PersonalMoneySummary>;
-  };
+  finance: PersonalMoneySummary;
 };
 
 function emptyMoney(): PersonalMoneySummary {
@@ -49,30 +46,25 @@ export async function getDashboard(ctx: SessionContext, requestedDate: string): 
       .from("transactions")
       .select("created_by, type, amount")
       .eq("workspace_id", ctx.workspace.id)
+      .eq("created_by", ctx.user.id)
       .gte("date", from)
       .lte("date", to),
   ]);
 
-  const byMember: Record<string, PersonalMoneySummary> = {};
-  for (const member of ctx.workspace.members) byMember[member.id] = emptyMoney();
-  const combined = emptyMoney();
+  const finance = emptyMoney();
   const rows = (unwrap(transactionRows) ?? []) as { created_by: string; type: string; amount: number }[];
   for (const row of rows) {
-    const own = (byMember[row.created_by] ??= emptyMoney());
+    // Defense in depth: query dan payload hanya memproses transaksi sendiri.
+    if (row.created_by !== ctx.user.id) continue;
     const amount = Number(row.amount) || 0;
-    own.txCount += 1;
-    combined.txCount += 1;
+    finance.txCount += 1;
     if (row.type === "income") {
-      own.income += amount;
-      combined.income += amount;
+      finance.income += amount;
     } else {
-      own.expense += amount;
-      combined.expense += amount;
+      finance.expense += amount;
     }
   }
-  for (const summary of [...Object.values(byMember), combined]) {
-    summary.balance = summary.income - summary.expense;
-  }
+  finance.balance = finance.income - finance.expense;
 
-  return { date, month, week, finance: { combined, byMember } };
+  return { date, month, week, finance };
 }
