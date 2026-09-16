@@ -97,6 +97,62 @@ export async function createCategory(
   return catDTO(row);
 }
 
+/**
+ * Sunting kategori: nama, kelompok (bucket), dan/atau target bulanan.
+ * Jenis (income/expense) sengaja tidak bisa diubah — supaya transaksi lama
+ * tidak tiba-tiba salah kelompok; buat kategori baru saja kalau butuh beda jenis.
+ */
+export async function updateCategory(
+  ctx: Ctx,
+  id: string,
+  input: { name?: string; bucket?: CategoryDTO["bucket"]; monthlyTarget?: number }
+): Promise<CategoryDTO> {
+  const sb = await getSupabaseFor(ctx);
+  const existing = unwrap(
+    await sb
+      .from("transaction_categories")
+      .select("id, type")
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("active", true)
+      .maybeSingle()
+  ) as { id: string; type: string } | null;
+  if (!existing) throw new Error("Kategori tidak ditemukan.");
+
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) throw new Error("Nama kategori wajib diisi.");
+    if (name.length > 40) throw new Error("Nama kategori maksimal 40 karakter.");
+    patch.name = name;
+  }
+  if (input.bucket !== undefined) {
+    if (existing.type === "income") throw new Error("Kategori pemasukan tidak punya kelompok.");
+    if (!(BUCKETS as readonly string[]).includes(input.bucket)) {
+      throw new Error("Kelompok kategori tidak valid.");
+    }
+    patch.bucket = input.bucket;
+  }
+  if (input.monthlyTarget !== undefined) {
+    if (!Number.isInteger(input.monthlyTarget) || input.monthlyTarget < 0) {
+      throw new Error("Target bulanan harus angka bulat 0 atau lebih.");
+    }
+    patch.monthly_target = input.monthlyTarget;
+  }
+  if (Object.keys(patch).length === 0) throw new Error("Tidak ada perubahan yang dikirim.");
+
+  const row = unwrap(
+    await sb
+      .from("transaction_categories")
+      .update(patch)
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .select(CAT_SELECT)
+      .single()
+  ) as unknown as CategoryRow;
+  return catDTO(row);
+}
+
 /** Kategori tidak boleh dihapus kalau masih dipakai transaksi (nonaktifkan saja). */
 export async function deactivateCategory(ctx: Ctx, id: string): Promise<{ ok: boolean; error?: string }> {
   const sb = await getSupabaseFor(ctx);
@@ -486,6 +542,50 @@ export async function createTarget(ctx: Ctx, input: { name: string; targetAmount
   return {
     id: row.id, name: row.name, targetAmount: row.target_amount, currentAmount: row.current_amount,
     percent: 0, remaining: row.target_amount,
+  };
+}
+
+/** Sunting target: nama dan/atau nominal tujuan. Setoran yang sudah masuk tidak diubah. */
+export async function updateTarget(
+  ctx: Ctx,
+  id: string,
+  input: { name?: string; targetAmount?: number }
+): Promise<TargetDTO> {
+  const sb = await getSupabaseFor(ctx);
+  const t = unwrap(
+    await sb
+      .from("financial_targets")
+      .select("id, name, target_amount, current_amount")
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .eq("active", true)
+      .maybeSingle()
+  ) as { id: string; name: string; target_amount: number; current_amount: number } | null;
+  if (!t) throw new Error("Target tidak ditemukan.");
+
+  const name = input.name?.trim() ?? t.name;
+  if (!name) throw new Error("Nama target wajib diisi.");
+  if (name.length > 60) throw new Error("Nama target maksimal 60 karakter.");
+  if (input.targetAmount !== undefined) {
+    if (!Number.isInteger(input.targetAmount) || input.targetAmount <= 0) {
+      throw new Error("Nominal target harus lebih dari 0.");
+    }
+  }
+  const targetAmount = input.targetAmount ?? t.target_amount;
+
+  const row = unwrap(
+    await sb
+      .from("financial_targets")
+      .update({ name, target_amount: targetAmount })
+      .eq("id", id)
+      .eq("workspace_id", ctx.workspace.id)
+      .select("id, name, target_amount, current_amount")
+      .single()
+  ) as unknown as { id: string; name: string; target_amount: number; current_amount: number };
+  return {
+    id: row.id, name: row.name, targetAmount: row.target_amount, currentAmount: row.current_amount,
+    percent: row.target_amount > 0 ? Math.min(100, Math.round((row.current_amount / row.target_amount) * 100)) : 0,
+    remaining: Math.max(0, row.target_amount - row.current_amount),
   };
 }
 

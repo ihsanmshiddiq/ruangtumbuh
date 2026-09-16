@@ -48,6 +48,12 @@ export function FinanceSection() {
   const [deletingRange, setDeletingRange] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showAllocTools, setShowAllocTools] = useState(false);
+  const [showCatManager, setShowCatManager] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<string | null>(null);
+  const [tName, setTName] = useState("");
+  const [tAmount, setTAmount] = useState("");
+  const [savingTarget, setSavingTarget] = useState(false);
+  const [deletingTarget, setDeletingTarget] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -137,6 +143,43 @@ export function FinanceSection() {
     }
   }
 
+  function beginEditTarget(t: TargetDTO) {
+    setEditingTarget(t.id);
+    setTName(t.name);
+    setTAmount(String(t.targetAmount));
+  }
+
+  async function saveTargetEdit(t: TargetDTO) {
+    setSavingTarget(true);
+    try {
+      await apiFetch(`/api/targets/${t.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: tName.trim(), targetAmount: Number(tAmount.replace(/\D/g, "")) }),
+      });
+      toast({ title: "Target diperbarui" });
+      setEditingTarget(null);
+      await refetch();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menyimpan target." });
+    } finally {
+      setSavingTarget(false);
+    }
+  }
+
+  async function removeTarget(t: TargetDTO) {
+    if (!window.confirm(`Hapus target "${t.name}"? Setoran yang sudah tercatat (${rupiah(t.currentAmount)}) tidak ikut terhapus.`)) return;
+    setDeletingTarget(true);
+    try {
+      await apiFetch(`/api/targets/${t.id}`, { method: "DELETE" });
+      toast({ title: "Target dihapus" });
+      await refetch();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menghapus target." });
+    } finally {
+      setDeletingTarget(false);
+    }
+  }
+
   return (
     <section aria-label="Keuangan pribadi" className="flex flex-col gap-6">
       <SectionHeader
@@ -194,6 +237,7 @@ export function FinanceSection() {
               className="pl-9 h-10"
             />
           </div>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex gap-1.5" role="group" aria-label="Saring jenis transaksi">
             {(["all", "income", "expense"] as const).map((t) => (
               <button
@@ -212,8 +256,21 @@ export function FinanceSection() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            aria-expanded={showCatManager}
+            onClick={() => setShowCatManager((v) => !v)}
+            className="min-h-9 px-2 text-[0.72rem] font-medium text-muted-foreground hover:text-foreground"
+          >
+            kelola kategori
+          </button>
+          </div>
         </div>
       </Panel>
+
+      {showCatManager && (
+        <CategoryManager categories={data?.categories ?? []} onSaved={refetch} />
+      )}
 
       {/* Daftar transaksi — kartu responsif, nominal menonjol, masuk/keluar berlabel */}
       <div className="order-8">
@@ -416,25 +473,64 @@ export function FinanceSection() {
           <div className="space-y-2.5">
             {(data?.targets ?? []).map((t) => (
               <Panel key={t.id} className="py-3.5">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <p className="text-[0.9rem] font-semibold">{t.name}</p>
-                    <p className="rt-fine mt-0.5">
-                      Terkumpul {rupiah(t.currentAmount)} dari {rupiah(t.targetAmount)} · sisa {rupiah(t.remaining)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-[family-name:var(--font-plex-mono)] text-sm font-semibold text-rt-lilac">{t.percent}%</span>
-                    {showTools && (
-                      <Button size="sm" variant="outline" className="h-9" onClick={() => contribute(t)}>
-                        Setor
+                {editingTarget === t.id ? (
+                  <div className="space-y-2">
+                    <Input value={tName} onChange={(e) => setTName(e.target.value)} maxLength={60} aria-label="Nama target" className="h-11" placeholder="Nama target" />
+                    <Input
+                      value={tAmount}
+                      onChange={(e) => setTAmount(e.target.value.replace(/\D/g, ""))}
+                      inputMode="numeric"
+                      aria-label="Nominal target"
+                      className="h-11 font-[family-name:var(--font-plex-mono)]"
+                      placeholder="Nominal tujuan"
+                    />
+                    <p className="rt-fine">Terkumpul {rupiah(t.currentAmount)} — setoran yang sudah masuk tidak berubah.</p>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" className="h-10" onClick={() => setEditingTarget(null)} disabled={savingTarget}>Batal</Button>
+                      <Button className="h-10" onClick={() => saveTargetEdit(t)} disabled={savingTarget || !tName.trim() || !tAmount}>
+                        {savingTarget && <TinySpinner />}
+                        Simpan
                       </Button>
-                    )}
+                    </div>
                   </div>
-                </div>
-                <div className="mt-2.5 h-2 rounded-full bg-white/[0.05] overflow-hidden" aria-hidden="true">
-                  <div className="h-full rounded-full bg-gradient-to-r from-rt-violet to-rt-teal transition-all" style={{ width: `${t.percent}%` }} />
-                </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <p className="text-[0.9rem] font-semibold">{t.name}</p>
+                        <p className="rt-fine mt-0.5">
+                          Terkumpul {rupiah(t.currentAmount)} dari {rupiah(t.targetAmount)} · sisa {rupiah(t.remaining)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="font-[family-name:var(--font-plex-mono)] text-sm font-semibold text-rt-lilac">{t.percent}%</span>
+                        {showTools && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-9" onClick={() => contribute(t)}>
+                              Setor
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-9" aria-label={`Sunting target ${t.name}`} onClick={() => beginEditTarget(t)}>
+                              Ubah
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-9 text-muted-foreground hover:text-destructive"
+                              aria-label={`Hapus target ${t.name}`}
+                              onClick={() => removeTarget(t)}
+                              disabled={deletingTarget}
+                            >
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-2.5 h-2 rounded-full bg-white/[0.05] overflow-hidden" aria-hidden="true">
+                      <div className="h-full rounded-full bg-gradient-to-r from-rt-violet to-rt-teal transition-all" style={{ width: `${t.percent}%` }} />
+                    </div>
+                  </>
+                )}
               </Panel>
             ))}
             {showTools && <TargetManager onSaved={refetch} />}
@@ -570,7 +666,7 @@ function TransactionDrawer({
             <div>
               <p className="rt-kicker mb-1.5">kategori</p>
               {cats.length === 0 ? (
-                <p className="rt-fine">Belum ada kategori {TYPE_LABEL[type]}. Tambahkan lewat kelola kategori (segera).</p>
+                <p className="rt-fine">Belum ada kategori {TYPE_LABEL[type]} — tambahkan lewat “kelola kategori” di daftar transaksi.</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pilih kategori">
                   {cats.map((c) => (
@@ -766,5 +862,219 @@ function AllocationEditor({ items: initial, onSaved }: { items: AllocItem[]; onS
         Perubahan berlaku untuk pembagian pemasukan berikutnya — transaksi yang sudah tercatat tidak diubah.
       </p>
     </div>
+  );
+}
+
+/* ── Kelola kategori — tambah, ganti nama/kelompok/target bulanan, hapus ── */
+
+const BUCKET_LABEL: Record<string, string> = {
+  needs: "Kebutuhan",
+  wants: "Keinginan",
+  charity: "Sedekah",
+  savings: "Tabungan",
+  target: "Dana target",
+  income: "Pemasukan",
+};
+
+function CategoryManager({
+  categories,
+  onSaved,
+}: {
+  categories: CategoryDTO[];
+  onSaved: () => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState<"expense" | "income">("expense");
+  const [newBucket, setNewBucket] = useState<string>("needs");
+
+  // Salinan lokal untuk edit inline; disinkron ulang tiap data server berubah.
+  const [draft, setDraft] = useState(() => Object.fromEntries(categories.map((c) => [c.id, c.name])));
+  const [draftTarget, setDraftTarget] = useState(() =>
+    Object.fromEntries(categories.map((c) => [c.id, c.monthlyTarget ? String(c.monthlyTarget) : ""]))
+  );
+  const lastCount = categories.length;
+  const [seenCount, setSeenCount] = useState(lastCount);
+  if (seenCount !== lastCount || categories.some((c) => draft[c.id] === undefined)) {
+    setSeenCount(lastCount);
+    setDraft(Object.fromEntries(categories.map((c) => [c.id, c.name])));
+    setDraftTarget(Object.fromEntries(categories.map((c) => [c.id, c.monthlyTarget ? String(c.monthlyTarget) : ""])));
+  }
+
+  async function addCategory() {
+    setSaving(true);
+    try {
+      await apiFetch("/api/categories", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newName.trim(),
+          type: newType,
+          bucket: newType === "income" ? undefined : newBucket,
+        }),
+      });
+      toast({ title: "Kategori ditambahkan" });
+      setNewName("");
+      await onSaved();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menambah kategori." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function patchCategory(id: string, body: Record<string, unknown>, okMsg: string) {
+    try {
+      await apiFetch(`/api/categories/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+      toast({ title: okMsg });
+      await onSaved();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menyimpan kategori." });
+    }
+  }
+
+  async function removeCategory(c: CategoryDTO) {
+    if (!window.confirm(`Hapus kategori "${c.name}"?`)) return;
+    try {
+      const res = await apiFetch<{ ok: boolean; error?: string }>(`/api/categories/${c.id}`, { method: "DELETE" });
+      toast({ title: res?.error ?? "Kategori dihapus" });
+      await onSaved();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Gagal menghapus kategori." });
+    }
+  }
+
+  const expenses = categories.filter((c) => c.type === "expense");
+  const incomes = categories.filter((c) => c.type === "income");
+
+  return (
+    <Panel className="order-7">
+      <p className="rt-kicker mb-1">kelola kategori</p>
+      <p className="rt-fine mb-4">
+        Kategori yang masih dipakai transaksi tidak bisa dihapus — dia dinonaktifkan supaya riwayat tetap utuh.
+      </p>
+
+      {/* Tambah kategori baru */}
+      <div className="flex flex-col sm:flex-row gap-2 mb-5">
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Nama kategori baru"
+          aria-label="Nama kategori baru"
+          className="h-11 flex-1"
+          maxLength={40}
+        />
+        <div className="flex gap-1.5" role="group" aria-label="Jenis kategori baru">
+          {(["expense", "income"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={newType === t}
+              onClick={() => setNewType(t)}
+              className={cn(
+                "min-h-11 rounded-lg border px-3.5 text-[0.78rem] font-medium",
+                newType === t ? "border-rt-violet/50 bg-rt-violet/15 text-foreground" : "border-border text-muted-foreground"
+              )}
+            >
+              {t === "income" ? "Masuk" : "Keluar"}
+            </button>
+          ))}
+        </div>
+        {newType === "expense" && (
+          <select
+            value={newBucket}
+            onChange={(e) => setNewBucket(e.target.value)}
+            aria-label="Kelompok kategori baru"
+            className="h-11 rounded-lg border border-border bg-transparent px-2.5 text-[0.78rem]"
+          >
+            {Object.entries(BUCKET_LABEL)
+              .filter(([k]) => k !== "income")
+              .map(([k, label]) => (
+                <option key={k} value={k}>{label}</option>
+              ))}
+          </select>
+        )}
+        <Button className="h-11" disabled={saving || !newName.trim()} onClick={addCategory}>
+          {saving && <TinySpinner />}
+          <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+          Tambah
+        </Button>
+      </div>
+
+      {/* Daftar kategori keluar */}
+      {[
+        { title: "pengeluaran", list: expenses, withBucket: true },
+        { title: "pemasukan", list: incomes, withBucket: false },
+      ].map(({ title, list, withBucket }) =>
+        list.length > 0 ? (
+          <div key={title} className="mb-4">
+            <p className="rt-kicker text-[0.55rem] mb-2">kategori {title}</p>
+            <div className="space-y-1.5">
+              {list.map((c) => (
+                <div key={c.id} className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <Input
+                    value={draft[c.id] ?? c.name}
+                    onChange={(e) => setDraft((d) => ({ ...d, [c.id]: e.target.value.slice(0, 40) }))}
+                    aria-label={`Nama kategori ${c.name}`}
+                    className="h-10 flex-1 min-w-36"
+                    maxLength={40}
+                  />
+                  {withBucket && (
+                    <select
+                      value={c.bucket}
+                      onChange={(e) => patchCategory(c.id, { bucket: e.target.value }, "Kelompok diperbarui")}
+                      aria-label={`Kelompok ${c.name}`}
+                      className="h-10 rounded-lg border border-border bg-transparent px-2 text-[0.75rem]"
+                    >
+                      {Object.entries(BUCKET_LABEL)
+                        .filter(([k]) => k !== "income")
+                        .map(([k, label]) => (
+                          <option key={k} value={k}>{label}</option>
+                        ))}
+                    </select>
+                  )}
+                  <Input
+                    value={draftTarget[c.id] ?? ""}
+                    onChange={(e) => setDraftTarget((d) => ({ ...d, [c.id]: e.target.value.replace(/\D/g, "") }))}
+                    placeholder="Target/bln"
+                    inputMode="numeric"
+                    aria-label={`Target bulanan ${c.name} (opsional)`}
+                    className="h-10 w-28 font-[family-name:var(--font-plex-mono)]"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Simpan perubahan kategori ${c.name}`}
+                    disabled={draft[c.id] === c.name && (draftTarget[c.id] ?? "") === (c.monthlyTarget ? String(c.monthlyTarget) : "")}
+                    onClick={() =>
+                      patchCategory(
+                        c.id,
+                        {
+                          ...(draft[c.id] !== c.name ? { name: draft[c.id]?.trim() } : {}),
+                          ...(draftTarget[c.id] ?? "") !== (c.monthlyTarget ? String(c.monthlyTarget) : "")
+                            ? { monthlyTarget: Number(draftTarget[c.id] || 0) }
+                            : {},
+                        },
+                        "Kategori diperbarui"
+                      )
+                    }
+                    className="w-10 h-10 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  >
+                    <span className="rt-kicker text-[0.55rem]">simpan</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Hapus kategori ${c.name}`}
+                    onClick={() => removeCategory(c)}
+                    className="w-10 h-10 grid place-items-center rounded-lg text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null
+      )}
+    </Panel>
   );
 }
