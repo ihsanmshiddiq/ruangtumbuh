@@ -13,6 +13,7 @@ import {
   DatabaseBackup,
   ShieldCheck,
   Smartphone,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,10 @@ export function SettingsView({ session }: { session: SessionContext }) {
   const [importing, setImporting] = useState(false);
   const [pendingRestore, setPendingRestore] = useState<{ summary: string; data: unknown } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   async function saveName() {
     const trimmed = name.trim();
@@ -155,6 +160,37 @@ export function SettingsView({ session }: { session: SessionContext }) {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
       window.location.reload();
+    }
+  }
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Konfirmasi kata sandi baru belum sama." });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const res = await fetch("/api/auth/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        toast({ title: data?.error ?? "Kata sandi belum diubah." });
+        return;
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast({ title: "Kata sandi diperbarui. Silakan masuk lagi." });
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.reload();
+    } catch {
+      toast({ title: "Tidak dapat menghubungi server." });
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -380,6 +416,31 @@ export function SettingsView({ session }: { session: SessionContext }) {
           </>
         ) : (
           <>
+            <form onSubmit={changePassword} className="rounded-xl border border-border/70 bg-white/[0.02] p-4 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <KeyRound className="w-4 h-4 text-rt-lilac" aria-hidden="true" />
+                <p className="text-[0.86rem] font-medium">Ganti kata sandi</p>
+              </div>
+              <p className="rt-fine mb-3">Gunakan password berbeda untuk tiap anggota. Setelah disimpan, semua sesi akun ini akan dikeluarkan.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <Label htmlFor="current-password" className="rt-kicker">saat ini</Label>
+                  <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="h-10 mt-1" required disabled={changingPassword} />
+                </div>
+                <div>
+                  <Label htmlFor="new-password" className="rt-kicker">baru</Label>
+                  <Input id="new-password" type="password" autoComplete="new-password" minLength={12} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-10 mt-1" required disabled={changingPassword} />
+                </div>
+                <div>
+                  <Label htmlFor="confirm-password" className="rt-kicker">ulangi baru</Label>
+                  <Input id="confirm-password" type="password" autoComplete="new-password" minLength={12} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="h-10 mt-1" required disabled={changingPassword} />
+                </div>
+              </div>
+              <Button type="submit" variant="outline" className="h-9 mt-3" disabled={changingPassword || !currentPassword || newPassword.length < 12 || !confirmPassword}>
+                {changingPassword && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                Simpan kata sandi baru
+              </Button>
+            </form>
             <p className="text-[0.86rem] text-muted-foreground mb-4">
               Sesi disimpan aman di cookie HttpOnly dan berlaku 30 hari.
             </p>
