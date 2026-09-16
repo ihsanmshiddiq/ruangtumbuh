@@ -128,7 +128,9 @@ export async function getMembershipContext(): Promise<SessionContext | null> {
   }
 
   // Mode pratinjau lokal — tidak pernah aktif di produksi (env tidak diset).
-  if (process.env.AUTH_BYPASS === "1") {
+  // Fail closed: walaupun seseorang keliru memasang AUTH_BYPASS atau
+  // service_role di Vercel, production tidak pernah boleh membuat sesi tiruan.
+  if (process.env.NODE_ENV !== "production" && process.env.AUTH_BYPASS === "1") {
     const service = createServiceSupabase();
     if (service) {
       const { data: first } = await service

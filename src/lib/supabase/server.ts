@@ -50,6 +50,9 @@ let serviceClient: SupabaseClient | null = null;
  * Produksi (Vercel): env ini sengaja tidak ada → selalu null.
  */
 export function createServiceSupabase(): SupabaseClient | null {
+  // Kunci service_role melewati RLS. Menolaknya secara eksplisit di runtime
+  // produksi membuat salah konfigurasi environment tidak menjadi kebocoran data.
+  if (process.env.NODE_ENV === "production") return null;
   const env = supabaseEnv();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!env || !key) return null;
