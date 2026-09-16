@@ -202,13 +202,13 @@ type PlanRow = {
 
 type EnergyRow = { user_id: string; date: string; level: number };
 
-export async function getWeek(ctx: Ctx, weekStart: string): Promise<WeekView> {
+export async function getWeek(ctx: Ctx, weekStart: string, knownActivities?: ActivityDTO[]): Promise<WeekView> {
   const ws = weekStartOf(weekStart);
   const dates = weekDates(ws);
   const sb = await getSupabaseFor(ctx);
 
   const [activities, logsRes, planRes, energyRes] = await Promise.all([
-    listActivities(ctx),
+    knownActivities ? Promise.resolve(knownActivities) : listActivities(ctx),
     sb
       .from("activity_logs")
       .select(
@@ -487,10 +487,10 @@ export async function setEnergy(ctx: Ctx, date: string, level: number): Promise<
 }
 
 /** Pastikan minggu berisi kejadian "planned" dari preferensi aktivitas. */
-export async function ensureWeekPlanned(ctx: Ctx, weekStart: string): Promise<void> {
+export async function ensureWeekPlanned(ctx: Ctx, weekStart: string, knownActivities?: ActivityDTO[]): Promise<void> {
   const ws = weekStartOf(weekStart);
   const dates = weekDates(ws);
-  const activities = (await listActivities(ctx)).filter((activity) => activity.createdBy === ctx.user.id);
+  const activities = (knownActivities ?? await listActivities(ctx)).filter((activity) => activity.createdBy === ctx.user.id);
   const sb = await getSupabaseFor(ctx);
   const existing = (unwrap(
     await sb

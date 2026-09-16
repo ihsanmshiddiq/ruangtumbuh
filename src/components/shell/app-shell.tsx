@@ -24,6 +24,7 @@ import { OfflineBanner, InstallPromptCard } from "@/components/pwa/pwa-client";
 import { initials } from "@/lib/format";
 import { sectionStore } from "@/lib/section-store";
 import { cn } from "@/lib/utils";
+import { usePresence } from "@/hooks/use-presence";
 
 const SECTIONS: {
   id: SectionId;
@@ -47,6 +48,7 @@ export function AppShell({ session }: { session: SessionContext }) {
   );
 
   const goTo = useCallback((id: SectionId) => sectionStore.set(id), []);
+  const presence = usePresence();
 
   async function handleLogout() {
     try {
@@ -82,6 +84,7 @@ export function AppShell({ session }: { session: SessionContext }) {
         <p className="font-[family-name:var(--font-fraunces)] italic text-muted-foreground text-[0.85rem] mt-1">
           Jalan boleh berubah. Arah jangan.
         </p>
+        <PresenceList members={session.workspace.members} presence={presence} />
 
         <nav aria-label="Navigasi utama" className="mt-8 flex flex-col gap-1">
           {SECTIONS.map(({ id, label, icon: Icon }) => (
@@ -149,6 +152,7 @@ export function AppShell({ session }: { session: SessionContext }) {
           </div>
           <div className="flex items-center gap-2">
             <span className="rt-kicker hidden sm:inline">{roleLabel}</span>
+            <PresenceDots members={session.workspace.members} presence={presence} />
             <button
               onClick={() => goTo("settings")}
               aria-label="Buka pengaturan"
@@ -216,6 +220,37 @@ export function AppShell({ session }: { session: SessionContext }) {
           </div>
         </nav>
       </div>
+    </div>
+  );
+}
+
+type Member = SessionContext["workspace"]["members"][number];
+type Presence = { id: string; name: string; lastActiveAt: string | null; active: boolean };
+
+function PresenceList({ members, presence }: { members: Member[]; presence: Presence[] }) {
+  return (
+    <div className="mt-5 rounded-xl border border-border/70 bg-white/[0.02] px-3 py-2.5 space-y-1.5" aria-label="Status aktivitas anggota">
+      {members.map((member) => {
+        const state = presence.find((item) => item.id === member.id);
+        const label = state?.active ? "aktif" : state?.lastActiveAt ? "terakhir aktif" : "belum terdeteksi";
+        return (
+          <div key={member.id} className="flex items-center justify-between gap-2 text-[0.72rem]">
+            <span className="flex items-center gap-2 min-w-0"><span aria-hidden="true" className={cn("size-2 rounded-full shrink-0", state?.active ? "bg-rt-good shadow-[0_0_8px_rgba(89,216,165,0.7)]" : "bg-muted-foreground/50")} /><span className="truncate">{member.displayName}</span></span>
+            <span className={cn("rt-kicker text-[0.5rem] shrink-0", state?.active ? "text-rt-good" : "text-muted-foreground")}>{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PresenceDots({ members, presence }: { members: Member[]; presence: Presence[] }) {
+  return (
+    <div className="flex -space-x-1" aria-label="Status aktivitas anggota">
+      {members.map((member) => {
+        const active = presence.find((item) => item.id === member.id)?.active;
+        return <span key={member.id} title={`${member.displayName}: ${active ? "aktif" : "tidak aktif"}`} className={cn("size-2.5 rounded-full border-2 border-[#0b0d12]", active ? "bg-rt-good" : "bg-muted-foreground/50")} />;
+      })}
     </div>
   );
 }

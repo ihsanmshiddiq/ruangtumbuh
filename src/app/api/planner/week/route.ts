@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { handle } from "@/server/api";
 import { requireContext } from "@/server/context";
-import { getWeek, ensureWeekPlanned } from "@/server/planner";
+import { getWeek, ensureWeekPlanned, listActivities } from "@/server/planner";
 import { isISODate, weekStartOf } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
     const ctx = await requireContext();
     const start = req.nextUrl.searchParams.get("start") ?? "";
     const ws = isISODate(start) ? weekStartOf(start) : weekStartOf(new Date().toISOString().slice(0, 10));
-    await ensureWeekPlanned(ctx, ws);
-    return getWeek(ctx, ws);
+    const activities = await listActivities(ctx);
+    await ensureWeekPlanned(ctx, ws, activities);
+    return getWeek(ctx, ws, activities);
   });
 }
 
@@ -26,7 +27,8 @@ export async function POST(req: NextRequest) {
     const ctx = await requireContext();
     const body = postSchema.parse(await req.json());
     const ws = weekStartOf(body.start);
-    await ensureWeekPlanned(ctx, ws);
-    return getWeek(ctx, ws);
+    const activities = await listActivities(ctx);
+    await ensureWeekPlanned(ctx, ws, activities);
+    return getWeek(ctx, ws, activities);
   });
 }

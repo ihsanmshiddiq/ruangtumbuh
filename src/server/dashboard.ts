@@ -3,7 +3,7 @@
 import type { SessionContext } from "@/lib/types";
 import { isISODate, monthKey, weekStartOf } from "@/lib/dates";
 import { getSupabaseFor, unwrap } from "@/server/db";
-import { ensureWeekPlanned, getWeek, type WeekView } from "@/server/planner";
+import { ensureWeekPlanned, getWeek, listActivities, type WeekView } from "@/server/planner";
 
 export type PersonalMoneySummary = {
   income: number;
@@ -38,10 +38,11 @@ export async function getDashboard(ctx: SessionContext, requestedDate: string): 
   // Hanya rencana milik pengguna aktif yang boleh dibuat otomatis. Rencana
   // pasangan tetap terbaca penuh, tetapi tidak pernah dibuat/diubah atas namanya.
   const weekStart = weekStartOf(date);
-  await ensureWeekPlanned(ctx, weekStart);
+  const activities = await listActivities(ctx);
+  await ensureWeekPlanned(ctx, weekStart, activities);
 
   const [week, transactionRows] = await Promise.all([
-    getWeek(ctx, weekStart),
+    getWeek(ctx, weekStart, activities),
     sb
       .from("transactions")
       .select("created_by, type, amount")

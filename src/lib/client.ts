@@ -11,17 +11,34 @@
 import { useCallback, useEffect, useState } from "react";
 
 const cache = new Map<string, unknown>();
+const inFlightGets = new Map<string, Promise<unknown>>();
 
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
-  const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!res.ok) {
-    throw new Error(data?.error ?? (res.status === 401 ? "Sesi tidak valid. Masuk lagi, ya." : "Ada gangguan. Coba lagi."));
+  const method = (init?.method ?? "GET").toUpperCase();
+  // Dua komponen yang meminta URL GET sama pada saat bersamaan cukup memakai
+  // satu request. Ini terutama mengurangi double-fetch saat berpindah halaman.
+  if (method === "GET") {
+    const existing = inFlightGets.get(url);
+    if (existing) return existing as Promise<T>;
   }
-  return data as T;
+  const request = (async () => {
+    const res = await fetch(url, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+    const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
+    if (!res.ok) {
+      throw new Error(data?.error ?? (res.status === 401 ? "Sesi tidak valid. Masuk lagi, ya." : "Ada gangguan. Coba lagi."));
+    }
+    return data as T;
+  })();
+  if (method !== "GET") return request;
+  inFlightGets.set(url, request);
+  try {
+    return await request;
+  } finally {
+    inFlightGets.delete(url);
+  }
 }
 
 export function useApi<T>(url: string | null) {

@@ -1,7 +1,8 @@
 "use client";
 
 // PESAN — obrolan pribadi berdua. Sederhana: gelembung, waktu, selesai.
-// Realtime sandbox = polling ringan (3 detik, hanya pesan setelah terakhir).
+// Polling ringan hanya saat chat terbuka. Interval 15 detik cukup responsif
+// untuk dua orang sekaligus mengurangi request latar hingga 80%.
 // Tanpa stiker/reaksi/media — cukup dua orang.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Send } from "lucide-react";
@@ -56,7 +57,7 @@ export function ChatSection() {
       } catch {
         // senyap — status koneksi sudah ditangani banner offline
       }
-    }, 3000);
+    }, 15000);
     return () => clearInterval(timer);
   }, []);
 

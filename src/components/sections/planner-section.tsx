@@ -3,8 +3,8 @@
 // PERENCANA — rencana minggu yang bergerak dengan kenyataan.
 // Mobile: pemilih hari horizontal + agenda hari terpilih.
 // Desktop: grid 7 kolom. Reschedule = bottom sheet, preferensi tak tersentuh.
-import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, ListTodo, Pencil, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import { useApi, apiFetch } from "@/lib/client";
 import { weekDates, weekStartOf, addDays, tanggalIndo, tanggalPendek, durasiMenit, HARI_SINGKAT, DOW_TO_WEEK_INDEX } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { SessionContext } from "@/lib/types";
-import type { WeekView, OccurrenceDTO } from "@/server/planner";
+import type { ActivityDTO, WeekView, OccurrenceDTO } from "@/server/planner";
 
 export function PlannerSection({ session }: { session: SessionContext }) {
   const { toast } = useToast();
@@ -30,6 +30,7 @@ export function PlannerSection({ session }: { session: SessionContext }) {
   const [resched, setResched] = useState<OccurrenceDTO | null>(null);
   const [unavail, setUnavail] = useState<OccurrenceDTO | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [editActivity, setEditActivity] = useState<ActivityDTO | null>(null);
   const [durationTarget, setDurationTarget] = useState<OccurrenceDTO | null>(null);
   const [ownerFilter, setOwnerFilter] = useState<string>(session.user.id);
 
@@ -47,6 +48,24 @@ export function PlannerSection({ session }: { session: SessionContext }) {
     () => (data?.activities ?? []).filter((a) => a.createdBy === session.user.id && a.preferredDays.length === 0),
     [data, session.user.id]
   );
+  const ownActivities = useMemo(
+    () => (data?.activities ?? []).filter((activity) => activity.createdBy === session.user.id),
+    [data, session.user.id]
+  );
+
+  async function archiveActivity(activity: ActivityDTO) {
+    if (!window.confirm(`Hapus "${activity.name}" dari rencana berulang? Riwayat yang sudah tercatat tetap aman.`)) return;
+    try {
+      await apiFetch(`/api/activities/${activity.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: false }),
+      });
+      toast({ title: `${activity.name} dihapus dari rencana` });
+      await refetch();
+    } catch (cause) {
+      toast({ title: cause instanceof Error ? cause.message : "Gagal menghapus aktivitas." });
+    }
+  }
 
   async function setStatus(occ: OccurrenceDTO, status: "done" | "skipped" | "planned") {
     // "Selesai" di Perencana membuka catatan durasi aktual (untuk review);
@@ -108,7 +127,7 @@ export function PlannerSection({ session }: { session: SessionContext }) {
             <Button variant="outline" size="icon" className="size-10" aria-label="Minggu berikutnya" onClick={() => setAnchor(addDays(anchor, 7))}>
               <ChevronRight className="w-4 h-4" />
             </Button>
-            <Button size="sm" className="h-10 ml-1" onClick={() => setAddOpen(true)}>
+            <Button size="sm" className="h-10 ml-1" onClick={() => { setEditActivity(null); setAddOpen(true); }}>
               <Plus className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">Aktivitas</span>
             </Button>
@@ -129,6 +148,31 @@ export function PlannerSection({ session }: { session: SessionContext }) {
         ))}
       </div>
       <p className="rt-fine">Detail rencana bisa dilihat berdua. Status, pindah jadwal, dan aktivitas hanya dapat diubah oleh pemiliknya.</p>
+
+      <Panel>
+        <div className="flex items-center gap-2 mb-3">
+          <ListTodo className="w-4 h-4 text-rt-lilac" aria-hidden="true" />
+          <p className="rt-kicker">aktivitas berulangku</p>
+          <span className="rt-fine ml-auto">{ownActivities.length}</span>
+        </div>
+        {ownActivities.length === 0 ? (
+          <p className="rt-fine">Belum ada aktivitas berulang. Buat satu untuk mengisi rencana secara otomatis.</p>
+        ) : (
+          <div className="space-y-2">
+            {ownActivities.map((activity) => (
+              <div key={activity.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-white/[0.02] px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.84rem] font-medium truncate">{activity.name}</p>
+                  <p className="rt-fine mt-0.5">{activity.preferredDays.length ? activity.preferredDays.map((day) => HARI_SINGKAT[day]).join(", ") : "fleksibel"}{activity.preferredStartTime ? ` · ${activity.preferredStartTime.slice(0, 5)}` : ""}{activity.estimatedDurationMinutes ? ` · ${durasiMenit(activity.estimatedDurationMinutes)}` : ""}</p>
+                </div>
+                <button type="button" onClick={() => { setEditActivity(activity); setAddOpen(true); }} className="size-10 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04]" aria-label={`Sunting ${activity.name}`}><Pencil className="w-4 h-4" /></button>
+                <button type="button" onClick={() => void archiveActivity(activity)} className="size-10 grid place-items-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10" aria-label={`Hapus ${activity.name}`}><Trash2 className="w-4 h-4" /></button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="rt-fine mt-3">Hapus menghentikan pembuatan rencana baru; riwayat sebelumnya tidak dihapus.</p>
+      </Panel>
 
       {/* Pemilih hari — horizontal di mobile, grid di desktop */}
       <div className="grid grid-cols-7 gap-1.5" role="tablist" aria-label="Pilih hari">
@@ -243,9 +287,11 @@ export function PlannerSection({ session }: { session: SessionContext }) {
       <ActivityDrawer
         open={addOpen}
         onOpenChange={setAddOpen}
+        activity={editActivity}
         onSaved={async () => {
           setAddOpen(false);
-          toast({ title: "Aktivitas ditambahkan" });
+          setEditActivity(null);
+          toast({ title: editActivity ? "Aktivitas diperbarui" : "Aktivitas ditambahkan" });
           await refetch();
         }}
       />
@@ -372,10 +418,12 @@ function DurationDrawer({
 function ActivityDrawer({
   open,
   onOpenChange,
+  activity,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  activity: ActivityDTO | null;
   onSaved: () => void;
 }) {
   const [name, setName] = useState("");
@@ -385,12 +433,21 @@ function ActivityDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    setName(activity?.name ?? "");
+    setDays(activity?.preferredDays ?? []);
+    setTime(activity?.preferredStartTime?.slice(0, 5) ?? "");
+    setDuration(activity?.estimatedDurationMinutes ? String(activity.estimatedDurationMinutes) : "");
+    setError(null);
+  }, [activity, open]);
+
   async function submit() {
     setSaving(true);
     setError(null);
     try {
-      await apiFetch("/api/activities", {
-        method: "POST",
+      await apiFetch(activity ? `/api/activities/${activity.id}` : "/api/activities", {
+        method: activity ? "PATCH" : "POST",
         body: JSON.stringify({
           name,
           preferredDays: days,
@@ -398,7 +455,6 @@ function ActivityDrawer({
           estimatedDurationMinutes: duration === "" ? null : Number(duration),
         }),
       });
-      setName(""); setDays([]); setTime(""); setDuration("");
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal menyimpan.");
@@ -412,7 +468,7 @@ function ActivityDrawer({
       <DrawerContent className="max-h-[85dvh]">
         <div className="mx-auto w-full max-w-md px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto">
           <DrawerHeader className="p-0 pt-1 pb-3 text-left">
-            <DrawerTitle className="font-[family-name:var(--font-fraunces)] text-lg">Aktivitas baru</DrawerTitle>
+            <DrawerTitle className="font-[family-name:var(--font-fraunces)] text-lg">{activity ? "Sunting aktivitas" : "Aktivitas baru"}</DrawerTitle>
             <DrawerDescription>
               Preferensi berulang — panduan, bukan aturan kaku.
             </DrawerDescription>
@@ -464,7 +520,7 @@ function ActivityDrawer({
               <Button variant="outline" className="flex-1 h-11" onClick={() => onOpenChange(false)} disabled={saving}>Batal</Button>
               <Button className="flex-[2] h-11 font-semibold" onClick={submit} disabled={saving || name.trim() === ""}>
                 {saving && <TinySpinner />}
-                Simpan aktivitas
+                {activity ? "Simpan perubahan" : "Simpan aktivitas"}
               </Button>
             </div>
           </div>
