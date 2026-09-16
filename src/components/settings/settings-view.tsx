@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { initials } from "@/lib/format";
+import { parseBukuKasHtml } from "@/lib/legacy-bukukas-html";
 import type { SessionContext } from "@/lib/types";
 
 export function SettingsView({ session }: { session: SessionContext }) {
@@ -90,10 +91,18 @@ export function SettingsView({ session }: { session: SessionContext }) {
       return;
     }
     let data: unknown;
+    let sourceNote = "";
     try {
-      data = JSON.parse(await file.text());
-    } catch {
-      toast({ title: "File bukan JSON yang valid." });
+      const text = await file.text();
+      if (/\.html?$/i.test(file.name)) {
+        const result = parseBukuKasHtml(text);
+        data = result.data;
+        sourceNote = `Buku Kas HTML terdeteksi; ${result.excludedTransactions} transaksi tanggal 1–7 September 2026 dikecualikan. `;
+      } else {
+        data = JSON.parse(text);
+      }
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : "File backup tidak dapat dibaca." });
       return;
     }
     setImporting(true);
@@ -108,7 +117,7 @@ export function SettingsView({ session }: { session: SessionContext }) {
         toast({ title: out?.error ?? "File backup tidak valid." });
         return;
       }
-      setPendingRestore({ summary: out?.summary ?? "", data });
+      setPendingRestore({ summary: `${sourceNote}${out?.summary ?? ""}`, data });
     } catch {
       toast({ title: "Tidak dapat menghubungi server." });
     } finally {
@@ -288,7 +297,7 @@ export function SettingsView({ session }: { session: SessionContext }) {
           <input
             id="backup-file"
             type="file"
-            accept="application/json,.json"
+            accept="application/json,.json,text/html,.html,.htm"
             className="sr-only"
             onChange={onBackupFile}
             disabled={importing}
@@ -313,6 +322,9 @@ export function SettingsView({ session }: { session: SessionContext }) {
           <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
           Pemulihan hanya bisa dilakukan oleh pemilik workspace, dan tidak dikirim ke
           layanan pihak ketiga mana pun.
+        </p>
+        <p className="rt-fine mt-2">
+          Selain JSON, file <span className="font-[family-name:var(--font-plex-mono)]">buku kas.html</span> lama juga bisa dibaca. Data 1–7 September 2026 dari file tersebut dikecualikan sesuai permintaan.
         </p>
       </div>
 
